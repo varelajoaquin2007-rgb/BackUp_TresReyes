@@ -1,0 +1,3114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tres Reyes — Logística</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --verde:    #1B7340;
+      --verde-cl: #2ecc71;
+      --negro:    #0D0D0D;
+      --gris-os:  #1A1A1A;
+      --gris-md:  #2C2C2C;
+      --gris-cl:  #444;
+      --texto:    #F0F0F0;
+      --texto-2:  #999;
+      --fondo:    #111;
+      --card:     #1E1E1E;
+      --borde:    #2E2E2E;
+      --amarillo: #F5C518;
+      --rojo:     #E53E3E;
+      --azul:     #3B82F6;
+    }
+
+    /* ---- MODO CLARO ---- */
+    body.modo-claro {
+      --gris-os:  #f5f5f5;
+      --gris-md:  #e8e8e8;
+      --gris-cl:  #d0d0d0;
+      --texto:    #111111;
+      --texto-2:  #555555;
+      --fondo:    #ffffff;
+      --card:     #f9f9f9;
+      --borde:    #dddddd;
+      --negro:    #ffffff;
+    }
+    body.modo-claro .sidebar         { background:#f0f0f0; border-color:#ddd; }
+    body.modo-claro .sidebar-logo    { border-color:#ddd; }
+    body.modo-claro .sidebar-footer  { border-color:#ddd; }
+    body.modo-claro .nav-item:hover  { background:#e0e0e0; }
+    body.modo-claro .nav-item.active { background:rgba(27,115,64,.08); }
+    body.modo-claro input, body.modo-claro select, body.modo-claro textarea {
+      background:#fff; border-color:#ccc; color:#111;
+    }
+    body.modo-claro .rep-header { background:var(--verde); }
+    body.modo-claro #nav-subbar { background:#0d47a1; }
+    body { font-family: 'Inter', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; font-size: 18px; }
+    #app { min-height: 100vh; }
+
+    /* ---- GENERAL ---- */
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:10px 18px; border-radius:8px; border:none; cursor:pointer; font-size:18px; font-weight:600; font-family:inherit; transition:all .15s; }
+    .btn-primary   { background:var(--verde);    color:#fff; }
+    .btn-primary:hover   { background:#145c30; }
+    .btn-secondary { background:var(--gris-md);  color:var(--texto); }
+    .btn-secondary:hover { background:var(--gris-cl); }
+    .btn-danger    { background:var(--rojo);      color:#fff; }
+    .btn-danger:hover    { background:#c0392b; }
+    .btn-warning   { background:var(--amarillo);  color:#111; }
+    .btn-sm { padding:6px 12px; font-size:18px; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    input, select, textarea {
+      background:var(--gris-md); border:1px solid var(--borde); color:var(--texto);
+      padding:10px 14px; border-radius:8px; font-size:18px; font-family:inherit; width:100%;
+      outline:none; transition:border .15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color:var(--verde); }
+    /* Quita el fondo sombreado (amarillo/gris) que Chrome pone en los
+       campos autocompletados al iniciar sesión: mantiene el fondo y el
+       color de texto propios de la app. */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px var(--gris-md) inset !important;
+      -webkit-text-fill-color: var(--texto) !important;
+      caret-color: var(--texto);
+      transition: background-color 9999s ease-in-out 0s;
+    }
+    body.modo-claro input:-webkit-autofill,
+    body.modo-claro input:-webkit-autofill:hover,
+    body.modo-claro input:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+      -webkit-text-fill-color: #111 !important;
+    }
+    label { font-size:18px; color:var(--texto-2); margin-bottom:4px; display:block; }
+
+    .card { background:var(--card); border:1px solid var(--borde); border-radius:12px; padding:20px; }
+    .tag  { display:inline-block; padding:3px 10px; border-radius:20px; font-size:18px; font-weight:600; }
+    .tag-verde    { background:#1B7340; color:#fff; }
+    .tag-amarillo { background:#b7860b; color:#fff; }
+    .tag-rojo     { background:#7a1c1c; color:#fff; }
+    .tag-azul     { background:#1e3a6e; color:#fff; }
+    .tag-gris     { background:#333;   color:#aaa; }
+
+    /* ---- LOGIN ---- */
+    #login-screen {
+      min-height:100vh; display:flex; align-items:stretch; background:#000;
+    }
+    .login-left {
+      flex:1; display:none; align-items:center; justify-content:center;
+      background:#000; border-right:1px solid #1a1a1a;
+    }
+    @media(min-width:768px){ .login-left { display:flex; } }
+
+    .login-brand { text-align:center; padding:48px; }
+    .marca-texto {
+      font-family:'Playfair Display','Georgia',serif;
+      font-size:52px; font-weight:900; color:#fff;
+      letter-spacing:8px; text-transform:uppercase;
+      text-shadow:0 2px 40px rgba(212,175,55,.15);
+      line-height:1;
+    }
+    .marca-sub {
+      font-family:'DM Sans',sans-serif;
+      font-size:18px; font-weight:600; color:#D4AF37;
+      letter-spacing:6px; text-transform:uppercase;
+      margin-top:12px;
+    }
+    .marca-sub span { opacity:.7; margin:0 6px; }
+    .login-brand .desc {
+      margin-top:40px; font-size:18px; color:rgba(255,255,255,.35);
+      line-height:1.7; max-width:260px; margin-left:auto; margin-right:auto;
+    }
+
+    .login-right {
+      width:100%; max-width:460px; display:flex; align-items:center;
+      justify-content:center; padding:48px 40px; background:#111;
+    }
+    @media(min-width:768px){ .login-right { min-width:420px; } }
+    .login-form-wrap { width:100%; max-width:360px; }
+
+    .mobile-brand { display:block; text-align:center; margin-bottom:36px; }
+    @media(min-width:768px){ .mobile-brand { display:none; } }
+
+    .login-form-wrap h2 { font-size:22px; font-weight:700; margin-bottom:6px; }
+    .login-form-wrap .bienvenida { font-size:18px; color:var(--texto-2); margin-bottom:28px; }
+    .form-group { margin-bottom:18px; }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+        /* ---- LAYOUT ADMIN ---- */
+    .layout { display:flex; min-height:100vh; }
+    .sidebar {
+      width:220px; flex-shrink:0; background:var(--gris-os); border-right:1px solid var(--borde);
+      display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:100;
+    }
+    .sidebar-logo { padding:24px 20px 16px; border-bottom:1px solid var(--borde); }
+    .sidebar-logo h2 { font-family:'DM Sans',sans-serif; font-size:18px; font-weight:700; color:#fff; }
+    .sidebar-logo span { font-size:18px; color:var(--texto-2); }
+    .sidebar nav { flex:1; padding:12px 0; }
+    .nav-item {
+      display:flex; align-items:center; gap:10px; padding:10px 20px; cursor:pointer;
+      color:var(--texto-2); font-size:18px; font-weight:500; transition:all .15s; border-left:3px solid transparent;
+    }
+    .nav-item:hover   { color:var(--texto);  background:var(--gris-md); }
+    .nav-item.active  { color:var(--verde-cl); border-left-color:var(--verde); background:rgba(27,115,64,.1); }
+    .nav-item .badge {
+      margin-left:auto; background:var(--rojo); color:#fff; border-radius:10px;
+      padding:1px 7px; font-size:18px;
+    }
+    .sidebar-footer { padding:16px 20px; border-top:1px solid var(--borde); }
+    .user-chip { display:flex; align-items:center; gap:10px; }
+    .user-avatar {
+      width:36px; height:36px; border-radius:50%; background:var(--verde);
+      display:flex; align-items:center; justify-content:center; font-weight:700; font-size:18px;
+    }
+    .user-info small { color:var(--texto-2); font-size:18px; display:block; }
+
+    .main-content { margin-left:220px; flex:1; padding:28px; }
+    .page-header { margin-bottom:24px; }
+    .page-header h1 { font-size:24px; font-weight:700; }
+    .page-header p  { color:var(--texto-2); font-size:18px; margin-top:4px; }
+
+    /* ---- STATS ---- */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+    .stat-card { background:var(--card); border:1px solid var(--borde); border-radius:12px; padding:20px; }
+    .stat-card .num { font-size:32px; font-weight:700; color:var(--verde-cl); }
+    .stat-card .lbl { font-size:18px; color:var(--texto-2); margin-top:4px; }
+
+    /* ---- BOLETAS ---- */
+    .boletas-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+    .boleta-card {
+      background:var(--card); border:1px solid var(--borde); border-radius:10px;
+      padding:14px; position:relative;
+    }
+    .boleta-card.geocoded { border-left:3px solid var(--verde); }
+    .boleta-card.sin-geo  { border-left:3px solid var(--amarillo); }
+    .boleta-nombre { font-weight:600; font-size:18px; margin-bottom:4px; }
+    .boleta-dir    { font-size:18px; color:var(--texto-2); margin-bottom:8px; }
+    .boleta-footer { display:flex; align-items:center; justify-content:space-between; }
+    .boleta-peso   { font-size:18px; font-weight:600; color:var(--verde-cl); }
+    .delete-btn    { background:none; border:none; color:var(--rojo); cursor:pointer; font-size:16px; padding:2px; }
+
+    /* ---- VIAJES ADMIN ---- */
+    .viaje-card {
+      background:var(--card); border:1px solid var(--borde); border-radius:12px;
+      margin-bottom:16px; overflow:hidden;
+    }
+    .viaje-header {
+      padding:16px 20px; background:var(--gris-md); display:flex;
+      align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+    .viaje-header h3 { font-size:16px; font-weight:600; }
+    .viaje-body { padding:16px 20px; }
+    .parada-row {
+      display:flex; align-items:flex-start; gap:12px; padding:10px 0;
+      border-bottom:1px solid var(--borde);
+    }
+    .parada-row:last-child { border-bottom:none; }
+    .parada-num {
+      width:28px; height:28px; border-radius:50%; background:var(--verde); color:#fff;
+      display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; flex-shrink:0;
+    }
+    .parada-info { flex:1; }
+    .parada-cliente { font-weight:600; font-size:18px; }
+    .parada-dir     { font-size:18px; color:var(--texto-2); margin-top:2px; }
+    .parada-peso    { font-size:18px; color:var(--verde-cl); margin-top:2px; font-weight:600; }
+
+    /* ---- MAPA ---- */
+    #map-container { height:400px; border-radius:12px; overflow:hidden; margin-bottom:16px; border:1px solid var(--borde); }
+    #nav-map { height:100vh; }
+
+    /* ---- REPARTIDOR ---- */
+    .rep-layout { min-height:100vh; display:flex; flex-direction:column; }
+    .rep-header {
+      background:var(--verde); padding:16px 20px; display:flex;
+      align-items:center; justify-content:space-between;
+    }
+    .rep-header h1 { font-size:18px; font-weight:700; }
+    .rep-content { flex:1; padding:16px; max-width:600px; margin:0 auto; width:100%; }
+
+    .viaje-rep-card {
+      background:var(--card); border:1px solid var(--borde); border-radius:12px;
+      margin-bottom:16px;
+    }
+    .viaje-rep-header {
+      padding:14px 16px; background:var(--gris-md); border-radius:12px 12px 0 0;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .parada-rep {
+      display:flex; align-items:flex-start; gap:12px; padding:12px 16px;
+      border-bottom:1px solid var(--borde); transition:background .15s;
+    }
+    .parada-rep.entregada { opacity:.5; }
+    .parada-rep.entregada .parada-cliente { text-decoration:line-through; }
+    .parada-rep:last-child { border-bottom:none; }
+    .check-btn {
+      background:none; border:2px solid var(--borde); border-radius:50%;
+      width:28px; height:28px; cursor:pointer; flex-shrink:0; transition:all .15s;
+      display:flex; align-items:center; justify-content:center; font-size:18px;
+    }
+    .check-btn.done { background:var(--verde); border-color:var(--verde); color:#fff; }
+
+    /* ---- NAV FULLSCREEN - Google Maps style ---- */
+    #nav-screen { display:none; position:fixed; inset:0; z-index:1000; background:#000; flex-direction:column; }
+    #nav-screen.active { display:flex; }
+
+    /* Instrucción principal - arriba */
+    #nav-instruction {
+      background:#1a73e8; color:#fff; padding:14px 16px;
+      display:flex; align-items:center; gap:14px; z-index:10; flex-shrink:0;
+      min-height:80px;
+    }
+    #nav-arrow-box {
+      width:52px; height:52px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(255,255,255,.15); border-radius:10px; font-size:28px;
+    }
+    #nav-instruction-text { flex:1; }
+    #nav-distance-next { font-size:22px; font-weight:700; line-height:1; }
+    #nav-turn-text { font-size:18px; opacity:.9; margin-top:3px; }
+    #nav-street-name { font-size:18px; opacity:.7; margin-top:2px; }
+
+    /* Barra secundaria */
+    #nav-subbar {
+      background:#0d47a1; color:#fff; padding:6px 16px;
+      display:flex; align-items:center; justify-content:space-between;
+      font-size:18px; flex-shrink:0;
+    }
+    #nav-gps-status { font-size:18px; opacity:.8; }
+
+    /* Mapa */
+    #nav-map { flex:1; }
+
+    /* Footer con parada actual */
+    #nav-footer {
+      background:#1E1E1E; border-top:1px solid #333;
+      padding:12px 16px; flex-shrink:0;
+    }
+    #nav-stop-info { margin-bottom:10px; }
+    #nav-stop-name { font-size:18px; font-weight:700; }
+    #nav-stop-addr { font-size:18px; color:var(--texto-2); margin-top:2px; }
+    #nav-stop-meta { font-size:18px; color:var(--verde-cl); margin-top:3px; }
+    #nav-btns { display:flex; gap:10px; }
+
+    /* ---- UPLOAD DROP ---- */
+    .drop-zone {
+      border:2px dashed var(--borde); border-radius:12px; padding:40px; text-align:center;
+      cursor:pointer; transition:all .2s;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color:var(--verde); background:rgba(27,115,64,.05); }
+    .drop-zone .icon { font-size:40px; margin-bottom:12px; }
+    .drop-zone h3    { font-size:16px; font-weight:600; margin-bottom:6px; }
+    .drop-zone p     { font-size:18px; color:var(--texto-2); }
+
+    /* ---- ALERTAS ---- */
+    .alerta-item {
+      display:flex; align-items:center; gap:14px; padding:14px;
+      background:var(--card); border:1px solid var(--borde); border-radius:10px; margin-bottom:10px;
+    }
+    .alerta-icon { font-size:24px; }
+    .alerta-text h4 { font-size:18px; font-weight:600; }
+    .alerta-text p  { font-size:18px; color:var(--texto-2); margin-top:2px; }
+
+    /* ---- UTILITIES ---- */
+    .flex { display:flex; }
+    .items-center { align-items:center; }
+    .gap-2 { gap:8px; }
+    .gap-3 { gap:12px; }
+    .mt-2  { margin-top:8px; }
+    .mt-4  { margin-top:16px; }
+    .mb-4  { margin-bottom:16px; }
+    .text-sm   { font-size:18px; }
+    .text-muted{ color:var(--texto-2); }
+    .text-green{ color:var(--verde-cl); }
+    .font-bold { font-weight:700; }
+    .w-full { width:100%; }
+    .toast {
+      position:fixed; bottom:24px; right:24px; background:var(--gris-md);
+      border:1px solid var(--borde); border-radius:10px; padding:14px 20px;
+      font-size:18px; z-index:9999; animation:slideIn .2s ease;
+      max-width:320px; box-shadow:0 8px 24px rgba(0,0,0,.4);
+    }
+    .toast.success { border-left:4px solid var(--verde); }
+    .toast.error   { border-left:4px solid var(--rojo); }
+    @keyframes slideIn { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+
+    .loading { display:flex; align-items:center; justify-content:center; padding:40px; color:var(--texto-2); gap:10px; }
+    .spinner { width:20px; height:20px; border:2px solid var(--borde); border-top-color:var(--verde); border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Ocultar panel de instrucciones de Leaflet Routing Machine */
+    .leaflet-routing-container { display: none !important; }
+    .leaflet-routing-alt { display: none !important; }
+
+    .section-tabs { display:flex; gap:4px; margin-bottom:20px; background:var(--gris-md); padding:4px; border-radius:10px; }
+    .tab-btn { flex:1; padding:8px; border:none; border-radius:7px; cursor:pointer; font-size:18px; font-weight:600; font-family:inherit; background:transparent; color:var(--texto-2); transition:all .15s; }
+    .tab-btn.active { background:var(--verde); color:#fff; }
+
+    select option { background:var(--gris-md); }
+
+    @media(max-width:768px) {
+      .main-content { margin-left:0; padding:16px; padding-top:64px; }
+      .sidebar {
+        position:fixed; top:0; left:0; height:100vh; z-index:1000;
+        transform:translateX(-100%); transition:transform .25s ease;
+        box-shadow:2px 0 12px rgba(0,0,0,.4);
+      }
+      .sidebar.open { transform:translateX(0); }
+      .mobile-topbar {
+        display:flex; position:fixed; top:0; left:0; right:0; height:56px;
+        background:var(--gris-md); border-bottom:1px solid var(--borde);
+        align-items:center; padding:0 16px; z-index:900; gap:12px;
+      }
+      .mobile-topbar h3 { margin:0; font-size:16px; }
+      .sidebar-overlay {
+        display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:999;
+      }
+      .sidebar-overlay.open { display:block; }
+      .hamburger-btn {
+        background:none; border:none; color:var(--texto); font-size:24px; cursor:pointer;
+        padding:4px 8px; line-height:1;
+      }
+    }
+    @media(min-width:769px) {
+      .mobile-topbar, .sidebar-overlay { display:none; }
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// =============================================
+// CONFIGURACIÓN
+// =============================================
+const API = 'https://tres-reyes-logistica.page.gd';
+
+// Punto de partida fijo: Fábrica Tres Reyes
+// Mapa del panel de administrador con Google Maps JavaScript API. Esta
+// key viaja al navegador (es lo normal para Maps JS); lo que la protege
+// es la restricción por dominio configurada en Google Cloud.
+const GOOGLE_MAPS_KEY = 'AIzaSyCO5nKrATJRFBlYvyO1_ZQLSs2w7MDoI1Q';
+let googleMapsPromise = null;
+function cargarGoogleMaps() {
+  // OJO: sin "&loading=async". Con ese parámetro, Google no deja lista
+  // la librería al terminar de cargar el script — hay que pedirla aparte
+  // con importLibrary(), y si no se hace así, "new google.maps.Map(...)"
+  // puede fallar con "is not a constructor" (pasaba de forma
+  // intermitente, según si la librería ya había terminado de armarse o
+  // no en ese momento). Sin el parámetro, el modo de carga es el
+  // clásico: al terminar el script, todo está listo para usar.
+  if (window.google && window.google.maps && window.google.maps.Map) return Promise.resolve();
+  if (googleMapsPromise) return googleMapsPromise;
+  googleMapsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}`;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('No se pudo cargar Google Maps'));
+    document.head.appendChild(s);
+  });
+  return googleMapsPromise;
+}
+
+const FABRICA = {
+  lat: -34.547362,
+  lon: -58.709439,
+  nombre: 'Fábrica Tres Reyes',
+  direccion: 'Martin de Irigoyen 1217, San Miguel, Buenos Aires'
+};
+// NOTA: ya no hay un punto de finalización fijo por defecto ("cochera").
+// Se elige por viaje en Configuración → Destinos; sin ninguno elegido,
+// el viaje termina en la última entrega.
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// =============================================
+// ESTADO GLOBAL
+// =============================================
+// Fecha local (Argentina) en formato YYYY-MM-DD. OJO: no usar
+// toISOString() para esto — convierte a UTC y de noche (después de las
+// 21hs en Argentina) devuelve el día siguiente, lo que hacía que un
+// viaje cargado a la noche quedara con una fecha distinta a "hoy".
+function fechaLocal(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+// Marca de versión: si en la consola del navegador (F12) ves este
+// mensaje al cargar la página, tenés la versión más nueva del código.
+// Si NO lo ves, el navegador está mostrando una copia vieja guardada.
+console.log('%c[TR] Versión cargada: 2026-09-21-separar-marcadores-superpuestos', 'color:#2ecc71;font-weight:bold');
+
+let state = {
+  user: JSON.parse(sessionStorage.getItem('tr_user') || 'null'),
+  page: 'boletas',        // admin: boletas | armar | viajes | alertas
+  repPage: 'viajes',      // rep: viajes | nav
+  boletas: [],
+  viajesAdmin: [],
+  viajesRep: [],
+  alertas: [],
+  repartidores: [],
+  camiones: [],
+  fechaSeleccionada: fechaLocal(),
+  navViaje: null,
+  navParadaIdx: 0,
+  leafletMap: null,
+  routingControl: null,
+  navMap: null,
+  navControl: null,
+  geocodingQueue: [],
+  userPosition: null,  // GPS del repartidor en tiempo real
+  loginView: 'login',  // 'login' | 'recuperar' | 'reset'
+  resetToken: null,
+};
+
+// Si llegamos desde el link del mail de recuperación (?reset=TOKEN),
+// arrancamos directo en la pantalla de nueva contraseña.
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('reset');
+  if (token) { state.loginView = 'reset'; state.resetToken = token; }
+})();
+
+// =============================================
+// API HELPERS
+// =============================================
+async function api(endpoint, method='GET', body=null) {
+  const opts = { method, headers:{'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const r = await fetch(`${API}/${endpoint}`, opts);
+    const raw = await r.text();
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      // El backend devolvió algo que no es JSON (típicamente un error PHP
+      // fatal, por ejemplo si falta correr la migración de la base de
+      // datos). Mostramos el motivo real en vez de fallar en silencio.
+      console.error('[TR API] Respuesta no-JSON de', endpoint, ':', raw);
+      return { success:false, message: 'Error del servidor al llamar '+endpoint+'. Revisá la consola del navegador para más detalle.' };
+    }
+  } catch (e) {
+    console.error('[TR API] Error de red en', endpoint, e);
+    return { success:false, message: 'No se pudo conectar con el servidor.' };
+  }
+}
+
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// =============================================
+// RENDER PRINCIPAL
+// =============================================
+function render() {
+  const app = document.getElementById('app');
+  if (!state.user) { app.innerHTML = renderLogin(); bindLogin(); return; }
+  if (state.user.rol === 'admin') { app.innerHTML = renderAdmin(); bindAdmin(); }
+  else { app.innerHTML = renderRepartidor(); bindRepartidor(); }
+}
+
+// =============================================
+// LOGIN
+// =============================================
+function renderLogin() {
+  const view = state.loginView || 'login';
+
+  let formHtml = '';
+
+  if (view === 'login') {
+    formHtml = `
+        <h2>Bienvenido</h2>
+        <p class="bienvenida">Ingresá tus credenciales para continuar</p>
+
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="l-email" placeholder="tu@email.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="tr-email-nofill" readonly onfocus="this.removeAttribute('readonly')" />
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="l-pass" placeholder="Tu contraseña" autocomplete="new-password" name="tr-pass-nofill" readonly onfocus="this.removeAttribute('readonly')" />
+        </div>
+        <button class="btn btn-primary w-full" id="l-btn" style="padding:13px;font-size:15px;margin-top:4px">
+          Ingresar →
+        </button>
+        <p id="l-err" class="text-sm" style="color:var(--rojo);margin-top:12px;display:none;text-align:center"></p>
+        <p class="text-sm" style="text-align:center;margin-top:16px">
+          <a href="#" id="l-olvide" style="color:var(--azul,#3B82F6)">¿Olvidaste tu contraseña?</a>
+        </p>`;
+  }
+
+  else if (view === 'recuperar') {
+    formHtml = `
+        <h2>Recuperar contraseña</h2>
+        <p class="bienvenida">Esta opción es solo para la cuenta de administrador. Se va a mandar un link para definir una nueva contraseña directamente a la casilla de administración.</p>
+
+        <button class="btn btn-primary w-full" id="r-btn" style="padding:13px;font-size:15px;margin-top:4px">
+          Enviar link de recuperación →
+        </button>
+        <p id="r-msg" class="text-sm" style="margin-top:12px;display:none;text-align:center"></p>
+        <p class="text-sm" style="text-align:center;margin-top:16px">
+          <a href="#" id="r-volver" style="color:var(--azul,#3B82F6)">← Volver al login</a>
+        </p>`;
+  }
+
+  else if (view === 'reset') {
+    formHtml = `
+        <h2>Nueva contraseña</h2>
+        <p class="bienvenida">Estás definiendo la nueva contraseña de la cuenta que solicitó la recuperación. Después pasásela al empleado.</p>
+
+        <div class="form-group">
+          <label>Nueva contraseña</label>
+          <input type="password" id="nr-pass" placeholder="••••••" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label>Repetir contraseña</label>
+          <input type="password" id="nr-pass2" placeholder="••••••" autocomplete="new-password" />
+        </div>
+        <button class="btn btn-primary w-full" id="nr-btn" style="padding:13px;font-size:15px;margin-top:4px">
+          Guardar nueva contraseña →
+        </button>
+        <p id="nr-msg" class="text-sm" style="margin-top:12px;display:none;text-align:center"></p>`;
+  }
+
+  return `
+  <div id="login-screen">
+
+    <div class="login-left">
+      <div class="login-brand">
+        <div class="marca-texto">TRES REYES</div>
+        <div class="marca-sub"><span>•</span> Aceitunas y Encurtidos <span>•</span></div>
+        <p class="desc">Sistema interno de logística y gestión de rutas de reparto.</p>
+      </div>
+    </div>
+
+    <div class="login-right">
+      <div class="login-form-wrap">
+
+        <div class="mobile-brand">
+          <div class="marca-texto" style="font-size:36px;letter-spacing:4px">TRES REYES</div>
+          <div class="marca-sub" style="font-size:18px;letter-spacing:3px"><span>•</span> Aceitunas y Encurtidos <span>•</span></div>
+        </div>
+
+        ${formHtml}
+
+      </div>
+    </div>
+
+  </div>`;
+}
+
+function irAVistaLogin(view) {
+  state.loginView = view;
+  // Limpiamos el token de la URL al volver al login normal, para que
+  // un refresh no te vuelva a mandar a la pantalla de "nueva contraseña"
+  if (view === 'login' && window.history?.replaceState) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+  render();
+}
+
+function bindLogin() {
+  const view = state.loginView || 'login';
+
+  if (view === 'login') {
+    const btn  = document.getElementById('l-btn');
+    const pass = document.getElementById('l-pass');
+    const err  = document.getElementById('l-err');
+
+    async function doLogin() {
+      btn.disabled = true; btn.textContent = 'Ingresando...';
+      try {
+        const r = await api('login.php','POST',{email:document.getElementById('l-email').value.trim(),password:pass.value});
+        if (r.success) {
+          state.user = r.usuario;
+          sessionStorage.setItem('tr_user', JSON.stringify(r.usuario));
+          render();
+        } else {
+          err.textContent = r.message; err.style.display='block';
+        }
+      } catch(e) { err.textContent='Error de conexión'; err.style.display='block'; }
+      btn.disabled=false; btn.textContent='Ingresar';
+    }
+
+    btn.addEventListener('click', doLogin);
+    const emailEl = document.getElementById('l-email');
+    [emailEl, pass].forEach(el => el?.addEventListener('keydown', e => e.key==='Enter' && doLogin()));
+
+    document.getElementById('l-olvide')?.addEventListener('click', e => {
+      e.preventDefault(); irAVistaLogin('recuperar');
+    });
+  }
+
+  else if (view === 'recuperar') {
+    const btn = document.getElementById('r-btn');
+    const msg = document.getElementById('r-msg');
+
+    async function doSolicitar() {
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      msg.style.display = 'none';
+      try {
+        const r = await api('recuperar.php','POST',{action:'solicitar'});
+        msg.textContent = r.message || 'Listo.';
+        msg.style.color = r.success ? 'var(--verde,#1B7340)' : 'var(--rojo)';
+        msg.style.display = 'block';
+      } catch(e) {
+        msg.textContent = 'Error de conexión'; msg.style.color='var(--rojo)'; msg.style.display='block';
+      }
+      btn.disabled = false; btn.textContent = 'Enviar link de recuperación →';
+    }
+
+    btn.addEventListener('click', doSolicitar);
+    document.getElementById('r-volver')?.addEventListener('click', e => {
+      e.preventDefault(); irAVistaLogin('login');
+    });
+  }
+
+  else if (view === 'reset') {
+    const btn = document.getElementById('nr-btn');
+    const msg = document.getElementById('nr-msg');
+    const p1  = document.getElementById('nr-pass');
+    const p2  = document.getElementById('nr-pass2');
+
+    async function doResetear() {
+      msg.style.display = 'none';
+      if (!p1.value || p1.value.length < 6) {
+        msg.textContent = 'La contraseña debe tener al menos 6 caracteres'; msg.style.color='var(--rojo)'; msg.style.display='block'; return;
+      }
+      if (p1.value !== p2.value) {
+        msg.textContent = 'Las contraseñas no coinciden'; msg.style.color='var(--rojo)'; msg.style.display='block'; return;
+      }
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      try {
+        const r = await api('recuperar.php','POST',{action:'resetear', token: state.resetToken, password: p1.value});
+        msg.textContent = r.message || 'Listo.';
+        msg.style.color = r.success ? 'var(--verde,#1B7340)' : 'var(--rojo)';
+        msg.style.display = 'block';
+        if (r.success) {
+          btn.style.display = 'none';
+          setTimeout(() => irAVistaLogin('login'), 1800);
+        }
+      } catch(e) {
+        msg.textContent = 'Error de conexión'; msg.style.color='var(--rojo)'; msg.style.display='block';
+      }
+      btn.disabled = false; if (btn.style.display !== 'none') btn.textContent = 'Guardar nueva contraseña →';
+    }
+
+    btn.addEventListener('click', doResetear);
+    p2?.addEventListener('keydown', e => e.key==='Enter' && doResetear());
+  }
+}
+
+// =============================================
+// ADMIN LAYOUT
+// =============================================
+function renderAdmin() {
+  const pages = {
+    boletas: renderBoletas,
+    armar:   renderArmar,
+    pospuestas: renderPospuestasPage,
+    viajes:  renderViajesAdmin,
+    alertas: renderAlertas,
+  };
+  const navItems = [
+    { id:'boletas',  icon:'📄', label:'Boletas' },
+    { id:'armar',    icon:'🗺️', label:'Viajes pendientes' },
+    { id:'pospuestas', icon:'📋', label:'Boletas pospuestas' },
+    { id:'viajes',   icon:'🚛', label:'Viajes del día' },
+    { id:'historico',icon:'🗂️', label:'Histórico de viajes' },
+    { id:'tracking', icon:'📡', label:'Tracking' },
+    { id:'alertas',  icon:'🔔', label:'Alertas' },
+    { id:'reportes', icon:'📊', label:'Reportes' },
+    { id:'config',   icon:'⚙️', label:'Configuración' },
+  ];
+  const actual = navItems.find(n => n.id === state.page);
+  return `
+  <div class="layout">
+    <div class="mobile-topbar">
+      <button class="hamburger-btn" id="hamburger-btn">☰</button>
+      <h3>${actual ? actual.icon+' '+actual.label : 'Tres Reyes'}</h3>
+    </div>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <h2>Tres Reyes</h2>
+        <span>Panel Admin</span>
+      </div>
+      <nav>
+        ${navItems.map(n=>`
+          <div class="nav-item ${state.page===n.id?'active':''}" data-page="${n.id}">
+            <span>${n.icon}</span> ${n.label}
+          </div>
+        `).join('')}
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="user-avatar">${state.user.nombre[0]}</div>
+          <div class="user-info">
+            <strong>${state.user.nombre}</strong>
+            <small>Administrador</small>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm w-full mt-2" id="logout-btn">Salir</button>
+      </div>
+    </aside>
+    <main class="main-content" id="admin-main">
+      ${(pages[state.page] || renderBoletas)()}
+    </main>
+  </div>`;
+}
+
+function bindAdmin() {
+  document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+    el.addEventListener('click', () => {
+      state.page = el.dataset.page;
+      loadCurrentAdminPage();
+      // En mobile, navegar cierra el menú desplegable solo.
+      document.getElementById('sidebar')?.classList.remove('open');
+      document.getElementById('sidebar-overlay')?.classList.remove('open');
+    });
+  });
+  document.getElementById('logout-btn')?.addEventListener('click', logout);
+  document.getElementById('toggle-modo-btn')?.addEventListener('click', toggleModo);
+  document.getElementById('hamburger-btn')?.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.toggle('open');
+    document.getElementById('sidebar-overlay')?.classList.toggle('open');
+  });
+  document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebar-overlay')?.classList.remove('open');
+  });
+  loadCurrentAdminPage();
+}
+
+function loadCurrentAdminPage() {
+  const main = document.getElementById('admin-main');
+  if (!main) return;
+
+  // Update active nav highlight
+  document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === state.page);
+  });
+
+  // Título de la barra superior de mobile (el menú lateral queda oculto
+  // ahí, así que este título es la única referencia de en qué pantalla
+  // está parado el admin).
+  const navTitles = {
+    boletas:'📄 Boletas', armar:'🗺️ Viajes pendientes', pospuestas:'📋 Boletas pospuestas',
+    viajes:'🚛 Viajes del día', historico:'🗂️ Histórico de viajes', tracking:'📡 Tracking',
+    alertas:'🔔 Alertas', reportes:'📊 Reportes', config:'⚙️ Configuración',
+  };
+  const topbarTitle = document.querySelector('.mobile-topbar h3');
+  if (topbarTitle) topbarTitle.textContent = navTitles[state.page] || 'Tres Reyes';
+
+  if (state.page === 'boletas') {
+    main.innerHTML = renderBoletas();
+    bindBoletasPage();
+    loadBoletasInto();
+  } else if (state.page === 'armar') {
+    main.innerHTML = renderArmar();
+    bindArmarPage();
+  } else if (state.page === 'pospuestas') {
+    main.innerHTML = renderPospuestasPage();
+    cargarPospuestasPage();
+  } else if (state.page === 'viajes') {
+    main.innerHTML = renderViajesAdmin();
+    loadViajesAdmin();
+  } else if (state.page === 'historico') {
+    main.innerHTML = renderHistorico();
+    loadHistorico();
+  } else if (state.page === 'alertas') {
+    main.innerHTML = renderAlertas();
+    loadAlertas();
+  } else if (state.page === 'tracking') {
+    main.innerHTML = renderTracking();
+    loadTracking();
+  } else if (state.page === 'reportes') {
+    main.innerHTML = renderReportes();
+    loadReportes();
+  } else if (state.page === 'config') {
+    main.innerHTML = renderConfig();
+    bindConfig();
+    loadConfig();
+  }
+}
+
+// =============================================
+// PAGE: BOLETAS
+// =============================================
+function renderBoletas() {
+  const sinGeo = state.boletas.filter(b => !b.lat || !b.lon).length;
+  return `
+  <div class="page-header">
+    <h1>📄 Boletas del día</h1>
+    <p>Cargá las boletas en PDF o manualmente. Fecha: <strong>${state.fechaSeleccionada}</strong></p>
+  </div>
+
+  <div class="flex gap-3 mb-4" style="flex-wrap:wrap">
+    <input type="date" id="fecha-sel" value="${state.fechaSeleccionada}" style="width:auto" />
+    <button class="btn btn-secondary btn-sm" id="refresh-boletas">↻ Actualizar</button>
+  </div>
+
+  <div class="drop-zone mb-4" id="drop-zone">
+    <div class="icon">📁</div>
+    <h3>Arrastrá un PDF o hacé click para subir</h3>
+    <p>El sistema extrae automáticamente nombre, dirección y peso de cada boleta</p>
+    <input type="file" id="pdf-input" accept=".pdf" multiple style="display:none" />
+  </div>
+
+  <div class="mb-4">
+    <button class="btn btn-secondary btn-sm" id="carga-manual-btn">➕ Cargar boleta manual</button>
+  </div>
+  <div id="carga-manual-form" style="display:none" class="card mb-4">
+    <h3 class="mb-4" style="font-size:15px">Nueva boleta manual</h3>
+    <p class="text-sm text-muted mb-4">Sirve para probar direcciones nuevas, o para cargar un pedido que no vino en PDF. Usá el mismo formato de las facturas: dirección, localidad y código postal (CPA) de esa dirección puntual.</p>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Cliente</label><input type="text" id="cm-cliente" placeholder="Nombre del cliente" /></div>
+      <div class="form-group"><label>Zona (1 a 6)</label><input type="text" id="cm-zona" placeholder="1" /></div>
+    </div>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Dirección (calle y altura)</label><input type="text" id="cm-direccion" placeholder="Sarmiento 1000" /></div>
+      <div class="form-group"><label>Localidad</label><input type="text" id="cm-localidad" placeholder="San Miguel" /></div>
+    </div>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Código postal (CPA)</label><input type="text" id="cm-cp" placeholder="B1663AAA" /></div>
+      <div class="form-group"><label>Peso (kg)</label><input type="number" id="cm-peso" placeholder="50" /></div>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-primary btn-sm" id="guardar-manual-btn">Guardar y geolocalizar</button>
+      <button class="btn btn-secondary btn-sm" id="cancelar-manual-btn">Cancelar</button>
+    </div>
+  </div>
+
+  <div id="pdf-progress" style="display:none" class="card mb-4">
+    <div class="loading"><div class="spinner"></div> Procesando PDF...</div>
+  </div>
+
+  ${state.boletas.length > 0 ? `
+  <div class="flex gap-2 mb-4" style="flex-wrap:wrap">
+    ${state.boletas.filter(b=>b.estado==='asignada'||b.estado==='entregada').length > 0 ? `
+    <button class="btn btn-danger btn-sm" id="limpiar-asignadas-btn">🗑 Limpiar boletas asignadas (${state.boletas.filter(b=>b.estado==='asignada'||b.estado==='entregada').length})</button>` : ''}
+    <button class="btn btn-danger btn-sm" id="limpiar-todo-btn">🗑 Limpiar todas las boletas del día</button>
+  </div>` : ''}
+  <div class="mb-4">
+    <button class="btn btn-danger btn-sm" id="borrar-todo-btn" style="opacity:.85">🗑️ Borrar TODO (todas las fechas, sin excepción)</button>
+    <p class="text-sm text-muted mt-2">Borra absolutamente todas las boletas y viajes del sistema, de cualquier fecha. No se puede deshacer.</p>
+  </div>
+
+  ${sinGeo > 0 ? `
+  <div class="card mb-4" style="border-left:3px solid var(--amarillo)">
+    <div class="flex items-center gap-2">
+      <span>⚠️</span>
+      <div>
+        <strong>${sinGeo} boleta${sinGeo>1?'s':''} sin ubicación GPS</strong>
+        <p class="text-sm text-muted mt-2">Hacé click en "Geolocalizar todas" para obtener las coordenadas automáticamente.</p>
+      </div>
+      <button class="btn btn-warning btn-sm" id="geo-all-btn" style="margin-left:auto">📍 Geolocalizar todas</button>
+    </div>
+  </div>` : state.boletas.length > 0 ? `
+  <div class="card mb-4" style="border-left:3px solid var(--verde)">
+    <div class="flex items-center gap-2">
+      <span>✅</span>
+      <strong>Todas las boletas geolocalizadas.</strong>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="state.page='armar';loadCurrentAdminPage()">🗺️ Viajes pendientes →</button>
+    </div>
+  </div>` : ''}
+
+  <div class="stats-grid mb-4">
+    <div class="stat-card"><div class="num">${state.boletas.length}</div><div class="lbl">Boletas cargadas</div></div>
+    <div class="stat-card"><div class="num">${state.boletas.reduce((s,b)=>s+parseFloat(b.peso_kg||0),0).toFixed(0)} kg</div><div class="lbl">Peso total</div></div>
+    <div class="stat-card"><div class="num">${state.boletas.filter(b=>b.lat&&b.lon).length}</div><div class="lbl">Geolocalizadas</div></div>
+  </div>
+
+  <div class="boletas-grid" id="boletas-grid">
+    ${state.boletas.map(b => `
+    <div class="boleta-card ${b.lat&&b.lon?'geocoded':'sin-geo'}" data-id="${b.id}">
+      <div class="boleta-nombre">${b.cliente}</div>
+      <div class="boleta-dir">📍 ${b.direccion}</div>
+      <div class="flex gap-2 items-center mb-2" style="flex-wrap:wrap">
+        ${b.barrio ? `<span class="text-sm text-muted">🏘 ${b.barrio}</span>` : ''}
+        <span class="tag tag-gris">🗺️ Zona ${b.zona || '—'}</span>
+      </div>
+      <div class="boleta-footer">
+        <span class="boleta-peso">⚖️ ${b.peso_kg} kg</span>
+        <div class="flex gap-2 items-center">
+          <span class="tag ${b.lat&&b.lon?(Number(b.geo_aproximada)?'tag-amarillo':'tag-verde'):'tag-amarillo'}">${b.lat&&b.lon?(Number(b.geo_aproximada)?'≈ GPS aprox.':'✓ GPS'):'Sin GPS'}</span>
+          <button class="delete-btn" data-editar="${b.id}" title="Editar dirección/zona" style="color:var(--azul)">✏️</button>
+          <button class="delete-btn" data-regeo="${b.id}" title="Volver a ubicar en el mapa" style="color:var(--verde)">📍</button>
+          ${b.estado!=='entregada'?`<button class="delete-btn" data-id="${b.id}" title="Eliminar">✕</button>`:''}
+        </div>
+      </div>
+      <div class="editar-cliente-form" id="editar-form-${b.id}" style="display:none;margin-top:10px;border-top:1px solid #2E2E2E;padding-top:10px">
+        <label class="text-sm text-muted">Dirección</label>
+        <input type="text" id="edit-dir-${b.id}" value="${(b.direccion||'').replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px" />
+        <label class="text-sm text-muted">Localidad</label>
+        <input type="text" id="edit-loc-${b.id}" value="${(b.barrio||'').replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px" />
+        <label class="text-sm text-muted">Zona</label>
+        <input type="text" id="edit-zona-${b.id}" value="${b.zona||''}" style="width:100%;margin-bottom:8px" />
+        <div class="flex gap-2">
+          <button class="btn btn-primary btn-sm" data-guardar-edit="${b.id}">Guardar</button>
+          <button class="btn btn-secondary btn-sm" data-cancelar-edit="${b.id}">Cancelar</button>
+        </div>
+      </div>
+    </div>`).join('') || '<p class="text-muted">No hay boletas para esta fecha.</p>'}
+  </div>`;
+}
+
+async function loadBoletasInto() {
+  const r = await api(`boletas.php?fecha=${state.fechaSeleccionada}`);
+  if (!r.success) return;
+  state.boletas = r.boletas;
+  const main = document.getElementById('admin-main');
+  if (!main) return;
+  if (state.page === 'boletas') {
+    main.innerHTML = renderBoletas();
+    bindBoletasPage();
+  }
+}
+
+async function loadBoletas() {
+  await loadBoletasInto();
+}
+
+function bindBoletasPage() {
+  // Fecha
+  document.getElementById('fecha-sel')?.addEventListener('change', e => {
+    state.fechaSeleccionada = e.target.value;
+    loadBoletas();
+  });
+  document.getElementById('refresh-boletas')?.addEventListener('click', loadBoletas);
+
+  // PDF drop
+  const drop = document.getElementById('drop-zone');
+  const input = document.getElementById('pdf-input');
+  drop?.addEventListener('click', () => input.click());
+  drop?.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop?.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop?.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-over'); processPDFs(e.dataTransfer.files); });
+  input?.addEventListener('change', e => processPDFs(e.target.files));
+
+  // Delete buttons (borrar boleta). Ahora se puede borrar en cualquier
+  // estado; si está en un viaje confirmado/en curso, el backend la saca
+  // y recalcula. Se apunta solo a los botones con título "Eliminar".
+  document.querySelectorAll('.delete-btn[data-id]').forEach(btn => {
+    if (btn.dataset.regeo || btn.dataset.editar) return;
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const b = state.boletas.find(x => String(x.id) === String(id));
+      const enViaje = b && b.viaje_estado && b.viaje_estado !== 'armado';
+      const msg = enViaje
+        ? 'Esta boleta está en un viaje ya confirmado/en curso. Si la borrás, se quita de ese viaje y la boleta se elimina. ¿Continuar?'
+        : '¿Eliminar esta boleta?';
+      if (!confirm(msg)) return;
+      const r = await api(`boletas.php?id=${id}`, 'DELETE');
+      if (!r.success) { toast(r.message||'No se pudo borrar','error'); return; }
+      await loadBoletas();
+    });
+  });
+
+  // Editar dirección/localidad/zona de un cliente (abre el form inline)
+  document.querySelectorAll('[data-editar]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const f = document.getElementById(`editar-form-${btn.dataset.editar}`);
+      if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+    });
+  });
+  document.querySelectorAll('[data-cancelar-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = document.getElementById(`editar-form-${btn.dataset.cancelarEdit}`);
+      if (f) f.style.display = 'none';
+    });
+  });
+  document.querySelectorAll('[data-guardar-edit]').forEach(btn => {
+    btn.addEventListener('click', () => guardarEdicionCliente(btn.dataset.guardarEdit));
+  });
+
+  // Reubicar una boleta puntual (por si el mapa la puso en otro lado)
+  document.querySelectorAll('[data-regeo]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const boleta = state.boletas.find(b => String(b.id) === btn.dataset.regeo);
+      if (!boleta) return;
+      btn.textContent = '⏳';
+      const res = await geocodificarBoleta(boleta);
+      const msg = res === 'exacta' ? '✅ Ubicación actualizada'
+                : res === 'aproximada' ? '⚠️ No se encontró la dirección exacta, quedó ubicada aproximadamente (revisala en el mapa)'
+                : '⚠️ No se encontró esa dirección ni siquiera aproximada';
+      toast(msg, res ? undefined : 'error');
+      await loadBoletas();
+    });
+  });
+
+  // Geo all
+  document.getElementById('geo-all-btn')?.addEventListener('click', geocodificarTodas);
+
+  // Limpiar boletas
+  document.getElementById('limpiar-asignadas-btn')?.addEventListener('click', async () => {
+    if (!confirm('¿Borrar las boletas ya asignadas a viajes?')) return;
+    const ids = state.boletas.filter(b=>b.estado==='asignada'||b.estado==='entregada').map(b=>b.id);
+    for (const id of ids) await api(`boletas.php?id=${id}`, 'DELETE');
+    toast('✅ Boletas asignadas eliminadas');
+    await loadBoletas();
+  });
+
+  document.getElementById('limpiar-todo-btn')?.addEventListener('click', async () => {
+    if (!confirm('¿Borrar TODAS las boletas del día? Esto no afecta los viajes ya confirmados.')) return;
+    const ids = state.boletas.map(b=>b.id);
+    for (const id of ids) await api(`boletas.php?id=${id}`, 'DELETE');
+    toast('✅ Boletas limpiadas');
+    await loadBoletas();
+  });
+
+  // Borrado total: cualquier fecha, cualquier estado, incluidos viajes.
+  // Doble confirmación por ser irreversible.
+  document.getElementById('borrar-todo-btn')?.addEventListener('click', async () => {
+    if (!confirm('¿BORRAR TODO? Esto elimina absolutamente todas las boletas y viajes del sistema, de cualquier fecha (incluidas las ya entregadas). No hay forma de deshacerlo. ¿Continuar?')) return;
+    if (!confirm('Última confirmación: se va a borrar TODO el historial de boletas y viajes. ¿Estás seguro?')) return;
+    const r = await api('boletas.php', 'POST', { action: 'borrar_todo' });
+    if (r.success) { toast('✅ ' + r.message); await loadBoletas(); }
+    else toast(r.message || 'No se pudo borrar', 'error');
+  });
+}
+
+async function guardarEdicionCliente(id) {
+  const direccion = document.getElementById(`edit-dir-${id}`).value.trim();
+  const barrio = document.getElementById(`edit-loc-${id}`).value.trim();
+  const zona = document.getElementById(`edit-zona-${id}`).value.trim();
+  if (!direccion) { toast('La dirección no puede quedar vacía', 'error'); return; }
+
+  const r = await api('boletas.php', 'POST', { action:'editar_cliente', id:parseInt(id), direccion, barrio, zona });
+  if (!r.success) { toast(r.message || 'No se pudo guardar', 'error'); return; }
+
+  // Si cambió la dirección/localidad, hay que volver a ubicar en el mapa.
+  if (r.regeocodificar) {
+    toast('📍 Dirección cambiada, volviendo a ubicar en el mapa...');
+    await loadBoletas();
+    const boleta = state.boletas.find(b => String(b.id) === String(id));
+    if (boleta) {
+      const res = await geocodificarBoleta(boleta);
+      toast(res ? '✅ Cliente actualizado y reubicado' : '⚠️ Actualizado, pero no se encontró la nueva dirección — revisá con 📍', res ? undefined : 'error');
+    }
+  } else {
+    toast('✅ Cliente actualizado');
+  }
+  await loadBoletas();
+}
+
+// addManual removed
+
+// =============================================
+// PDF PARSING
+// =============================================
+async function processPDFs(files) {
+  document.getElementById('pdf-progress').style.display = 'block';
+  const boletas = [];
+  const fallidos = []; // nombres de archivo que no se pudieron leer
+
+  const lista = Array.from(files).filter(f => f.name.endsWith('.pdf'));
+
+  for (const file of lista) {
+    try {
+      const text = await extractPDFText(file);
+      const parsed = parseBoleta(text);
+      if (parsed && parsed.length) {
+        boletas.push(...parsed);
+      } else {
+        fallidos.push(file.name);
+      }
+    } catch (e) {
+      console.error('[TR] Error leyendo', file.name, e);
+      fallidos.push(file.name);
+    }
+  }
+
+  document.getElementById('pdf-progress').style.display = 'none';
+
+  if (boletas.length === 0) {
+    toast(`No se pudo extraer datos de ningún PDF (${lista.length} archivo${lista.length!==1?'s':''}). Verificá el formato.`, 'error');
+    return;
+  }
+
+  const r = await api('boletas.php','POST',{
+    action:'bulk', fecha:state.fechaSeleccionada, boletas
+  });
+
+  if (r.success) {
+    // Aviso claro de cuántos archivos se seleccionaron vs. cuántas
+    // boletas realmente quedaron cargadas, para que ninguna se pierda
+    // "en silencio" sin que el admin se entere.
+    let msg = `✅ ${r.insertadas} de ${lista.length} boleta${lista.length!==1?'s':''} cargada${r.insertadas!==1?'s':''}.`;
+    if (fallidos.length) {
+      msg += ` ⚠️ No se pudieron leer: ${fallidos.join(', ')}`;
+      toast(msg, 'error');
+    } else if (r.insertadas < boletas.length) {
+      toast(msg + ' Algunas no tenían cliente/dirección válidos.', 'error');
+    } else {
+      toast(msg + ' Geolocalizando...');
+    }
+    await loadBoletas();
+    // Esperar que el DOM se actualice antes de geocodificar
+    await new Promise(r => setTimeout(r, 500));
+    await geocodificarTodas();
+  } else {
+    toast(r.message || 'No se pudieron guardar las boletas', 'error');
+  }
+}
+
+async function extractPDFText(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+function parseBoleta(rawText) {
+  // PASO 1: Limpiar texto. OJO: antes se borraba todo carácter no-ASCII,
+  // pero eso también borra letras válidas con tilde/ñ (ej. "MUÑIZ" quedaba
+  // "MU IZ"). Ahora solo se sacan símbolos raros y se conservan letras
+  // (con acentos), números y la puntuación típica de una factura.
+  const clean = rawText
+    .replace(/[^\p{L}\p{N}\s.,\-\/()&:$%#]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  console.log('[TR Parser] Texto limpio:', clean.substring(0, 400));
+
+  let cliente = '', direccion = '', peso = 0, localidad = '';
+
+  // RAZON SOCIAL: después de "Razon Social:" hasta "Domicilio:"/"IVA:"/"CUIT:"
+  // Muchos clientes tienen un alias entre paréntesis, ej:
+  // "ANDRES RAPPAZZO (LACTEOS RONCHOS) 636" — hay que permitir "()" y ","
+  // en el nombre, si no la extracción corta ahí y falla toda la boleta.
+  let m = clean.match(/Razon\s*Social\s*:\s*([A-Z0-9][A-Z0-9\s\.\-\/&,\(\)]{2,100}?)(?=\s*(?:Domicilio|IVA|CUIT)\s*:)/i);
+  if (m) {
+    cliente = m[1].trim().replace(/\s+/g,' ');
+    // Cuando el nombre ocupa 2 líneas en la factura, el CUIT queda
+    // pegado en el medio y el paréntesis del alias queda sin cerrar
+    // (ej. "ANDRES RAPPAZZO (LACTEOS" ... "CUIT: ... RONCHOS) 636").
+    // Si detectamos un "(" sin su ")", buscamos la continuación justo
+    // después del CUIT que sigue (ventana corta para no engancharnos
+    // con otro CUIT del documento, como el de la empresa emisora).
+    const abiertos = (cliente.match(/\(/g)||[]).length;
+    const cerrados = (cliente.match(/\)/g)||[]).length;
+    if (abiertos > cerrados) {
+      const restante = clean.slice(m.index + m[0].length, m.index + m[0].length + 80);
+      const cont = restante.match(/^\s*CUIT\s*:\s*[\d\-]+\s*([A-Z0-9][A-Z0-9\s\.\-\/&,\(\)]{0,40}?\)(?:\s*[0-9]+)?)/i);
+      if (cont) cliente = `${cliente} ${cont[1].trim()}`.replace(/\s+/g,' ');
+    }
+  } else {
+    // FORMATO 2 (nota de pedido / recibo): "Cliente :LA N 1 Direccion :..."
+    // en vez de "Razon Social: ... Domicilio: ...". Puede traer un alias
+    // entre paréntesis, igual que en Formato 1 (ej. "MATIAS PALAZZO (LAS
+    // CALEAS) 674" o "(MAURICIO) 1147") — hay que permitir "()" en el
+    // nombre, si no falla toda la extracción.
+    const mc = clean.match(/Cliente\s*:\s*([A-Z0-9\u00C0-\u017F°\s\.\-\(\)]{2,60}?)(?=\s*Direccion\s*:)/i);
+    if (mc) cliente = mc[1].trim().replace(/\s+/g,' ');
+  }
+
+  // ENTREGA: dirección de entrega real (tiene prioridad sobre Domicilio).
+  // Formato 1: "Entrega: MONTEVERDE 567 (BARILOCHE) RIO NEGRO" ... "Zona:"
+  // Formato 2: "Entrega : ..." ... "zona 1" (sin dos puntos) o "Vendedor :"
+  // "Vendedor" también corta la captura: si Entrega viene vacío, el texto
+  // sigue directo con "Vendedor :..." y sin este freno se leería eso como
+  // si fuera la dirección.
+  m = clean.match(/Entrega\s*:\s*([A-Z0-9\u00C0-\u017F ][A-Z0-9\u00C0-\u017F\s\.,\(\)\-\/]{4,120}?)(?=\s*(?:Zona|Remito|Condicion|Cant\.|Vendedor)\s*:?)/i);
+  if (!m) {
+    // Fallback menos estricto: tomar hasta 120 chars
+    m = clean.match(/Entrega\s*:\s*([A-Z0-9\u00C0-\u017F ][A-Z0-9\u00C0-\u017F\s\.,\(\)\-\/]{4,120})/i);
+    if (m) m[1] = m[1].substring(0, 120);
+  }
+  let entregaRaw = m ? m[1].trim().replace(/\s+/g,' ') : '';
+  // Si "Entrega:" viene vacío, el intento de respaldo (menos estricto,
+  // sin lista de palabras de corte) puede terminar agarrando la próxima
+  // etiqueta del PDF como si fuera texto de dirección (ej. "Vendedor").
+  // Si lo capturado es exactamente una de esas etiquetas, se descarta.
+  if (/^(vendedor|zona|remito|condicion|cant\.?|horario)$/i.test(entregaRaw)) entregaRaw = '';
+
+  // La localidad de ESTA entrega puntual, si el campo "Entrega" la trae
+  // aclarada aparte (entre paréntesis, o separada por comas). Es más
+  // confiable que la "Localidad:" general de la factura, que es la del
+  // domicilio del cliente y puede no coincidir con la de la entrega real
+  // — ej.: "Localidad: EL JAGUEL" pero "Entrega: ARTURO ILLIA 6136,
+  // POLVORINES, B1613": hay que entregar en Polvorines, no en El Jagüel.
+  let localidadEntrega = '';
+  let cpEntrega = '';
+
+  // Detecta un código postal argentino al final: CPA de 8 (B1613ABC),
+  // de 5 (B1613) o el viejo de 4 dígitos (1613).
+  const esCP = (s) => /^([A-Z]?\d{4}[A-Z]{0,3})$/i.test(s.trim());
+
+  if (entregaRaw && entregaRaw.length >= 5) {
+    direccion = entregaRaw;
+    // Caso 1: aclaración entre paréntesis -> "CALLE NUM (LOCALIDAD)"
+    // (puede venir además con un CP después: "... (LOCALIDAD), B1613")
+    const conParentesis = direccion.match(/^(.*?)\s*\(([^)]{2,40})\)\s*(?:,\s*([A-Z]?\d{4}[A-Z]{0,3}))?\s*$/i);
+    if (conParentesis) {
+      direccion = conParentesis[1].trim();
+      localidadEntrega = conParentesis[2].trim();
+      if (conParentesis[3]) cpEntrega = conParentesis[3].trim();
+    } else if (direccion.includes(',')) {
+      // Caso 2: partes separadas por coma. Puede ser:
+      //   "CALLE NUM, LOCALIDAD"           (2 partes)
+      //   "CALLE NUM, LOCALIDAD, CP"       (3 partes) <- formato nuevo
+      //   "CALLE NUM, CP"                  (2 partes, sin localidad)
+      const partes = direccion.split(',').map(p => p.trim()).filter(Boolean);
+      if (partes.length >= 3) {
+        // La última parte, si parece CP, es el CP; la del medio, localidad
+        direccion = partes[0];
+        if (esCP(partes[partes.length - 1])) {
+          cpEntrega = partes[partes.length - 1];
+          localidadEntrega = partes.slice(1, -1).join(', ');
+        } else {
+          localidadEntrega = partes.slice(1).join(', ');
+        }
+      } else if (partes.length === 2) {
+        direccion = partes[0];
+        if (esCP(partes[1])) cpEntrega = partes[1];
+        else localidadEntrega = partes[1];
+      }
+    }
+    // Caso 3: sin comas ni paréntesis -> "CALLE NUM" solo; la localidad
+    // de esta entrega se completa más abajo con la "Localidad:" general.
+  } else {
+    direccion = '';
+  }
+
+  // FALLBACK: si "Entrega:" viene vacío (pasa seguido), usar Domicilio
+  // (Formato 1) o Direccion (Formato 2) — la localidad se completa más
+  // abajo con la "Localidad:" general.
+  if (!direccion || direccion.length < 5) {
+    let dom = clean.match(/Domicilio\s*:\s*([A-Z0-9][A-Z0-9\s\.\-\/]{3,80}?)(?=\s*(?:IVA|CUIT|Localidad)\s*:)/i);
+    if (!dom) {
+      dom = clean.match(/Direccion\s*:\s*([A-Z0-9\u00C0-\u017F][A-Z0-9\u00C0-\u017F\s\.\-\/]{3,80}?)(?=\s*Localidad\s*:)/i);
+    }
+    if (dom) direccion = dom[1].trim();
+  }
+
+  // Si el PDF pegó un número con la palabra siguiente sin espacio
+  // (ej. "1331GRAND BOURG" en vez de "1331 GRAND BOURG"), separarlos
+  // para que la dirección geocodifique mejor.
+  if (direccion) {
+    direccion = direccion.replace(/(\d)([A-Z]{2,})/g, '$1 $2');
+    // Prolijidad: pasar a "Title Case" (primera de cada palabra en
+    // mayúscula, resto en minúscula) — no afecta la búsqueda, que ya
+    // ignora mayúsculas/acentos.
+    direccion = direccion.toLowerCase().replace(/\b\p{L}/gu, c => c.toUpperCase());
+  }
+
+  // LOCALIDAD GENERAL de la factura (domicilio del cliente) — se usa
+  // como localidad de la entrega solo cuando el campo "Entrega" no trajo
+  // su propia aclaración (casos 2 y 3 de arriba). Se prueban los cortes
+  // de los dos formatos de boleta.
+  let loc2 = clean.match(/Localidad\s*:\s*([A-Z\u00C0-\u017F\s]{2,40}?)(?=\s*(?:Zona|Vendedor|CUIT)\s*:)/i);
+  if (!loc2) {
+    loc2 = clean.match(/Localidad\s*:\s*([A-Z\u00C0-\u017F\s]{2,40}?)(?=\s*(?:Horario|Entrega|Vendedor)\s*:)/i);
+  }
+  const localidadGeneral = loc2 ? loc2[1].trim().replace(/C\s+A\s+B\s+A/gi,'CABA').substring(0,40) : '';
+  localidad = (localidadEntrega || localidadGeneral).substring(0, 40);
+  // Prolijidad: pasar a "Title Case" (no afecta la búsqueda en el mapa,
+  // que ya ignora mayúsculas/acentos, es solo para mostrar).
+  if (localidad) localidad = localidad.toLowerCase().replace(/\b\p{L}/gu, c => c.toUpperCase());
+
+  // ZONA: la boleta trae la zona de reparto (1 a 6). Puede venir como
+  // "Zona: 4", "Zona: zona 4" (Formato 1) o "zona 4" sin dos puntos
+  // (Formato 2, después de "Vendedor :...").
+  let zona = '';
+  const zonaMatch = clean.match(/zona\s*:?\s*(?:zona\s*)?([0-9]{1,2})/i);
+  if (zonaMatch) zona = zonaMatch[1].trim();
+
+  // PESO TOTAL: "Peso Total: 312,92 Bultos:" (Formato 1) o
+  // "Peso Total : 147,64 Total :" (Formato 2, sin "Bultos"). Acepta
+  // coma o punto como separador decimal.
+  const pw = clean.match(/Peso\s*Total\s*[:\s]+([0-9]+[.,][0-9]+)\s*Bultos/i)
+          || clean.match(/([0-9]+[.,][0-9]+)\s*Bultos/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+([0-9]+[.,][0-9]+)/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+([0-9]+)\s*Bultos/i);
+  if (pw) peso = parseFloat(pw[1].replace(',','.'));
+
+  // NOTA: ya no se agrega ", Buenos Aires" genérico acá — la localidad
+  // real (Derqui, Muñiz, Polvorines, etc.) ya se extrajo por separado
+  // más arriba y viaja en el campo "localidad"; agregar "Buenos Aires"
+  // sin la localidad puntual solo le restaba precisión a la búsqueda en
+  // el mapa (y duplicaba el dato cuando el servidor arma la consulta).
+
+  console.log('[TR Parser] Resultado:', { cliente, direccion, peso, zona, localidad, cp: cpEntrega });
+
+  // GPS embebido en el PDF (coordenadas pre-calculadas)
+  let lat = null, lon = null;
+  const gpsMatch = clean.match(/GPS:\s*(-?\d+\.\d+),\s*(-?\d+\.\d+)/i);
+  if (gpsMatch) { lat = parseFloat(gpsMatch[1]); lon = parseFloat(gpsMatch[2]); }
+
+  if (!cliente || !direccion) {
+    console.warn('[TR Parser] FALLO - texto disponible:', clean.substring(0,200));
+    return [];
+  }
+
+  return [{ cliente, direccion, peso_kg: peso || 50, barrio: localidad, cp: cpEntrega, zona, notas: '', lat, lon }];
+}
+
+
+async function geocodificarBoleta(boleta) {
+  // La geocodificación corre del lado del servidor (Google Geocoding) —
+  // acá solo se dispara y se interpreta el resultado. Devuelve 'exacta',
+  // 'aproximada' o false (no se encontró).
+  try {
+    const r = await api('boletas.php', 'POST', { action: 'geocodificar', id: boleta.id });
+    if (!r.success) { console.warn(`[TR Geo] ${boleta.cliente} (${boleta.direccion}): ${r.message}`); return false; }
+    return r.aproximada ? 'aproximada' : 'exacta';
+  } catch(e) {
+    console.error('Geocoding error for', boleta.direccion, e);
+    return false;
+  }
+}
+
+async function geocodificarTodas() {
+  const sinGeo = state.boletas.filter(b => !b.lat || !b.lon);
+  if (sinGeo.length === 0) return;
+
+  toast(`📍 Geolocalizando ${sinGeo.length} dirección${sinGeo.length>1?'es':''}...`);
+
+  const fallidas = [];
+  const aproximadas = [];
+  for (const boleta of sinGeo) {
+    let res = await geocodificarBoleta(boleta);
+    if (!res) {
+      // Un reintento por si hubo un error puntual de red.
+      await new Promise(r => setTimeout(r, 400));
+      res = await geocodificarBoleta(boleta);
+    }
+    if (!res) fallidas.push(`${boleta.cliente} (${boleta.direccion})`);
+    else if (res === 'aproximada') aproximadas.push(boleta.cliente);
+    await new Promise(r => setTimeout(r, 150)); // Google admite buen ritmo
+  }
+
+  await loadBoletas();
+  if (fallidas.length) {
+    toast(`⚠️ No se pudo ubicar ni siquiera aproximado: ${fallidas.join(' · ')}. Usá el botón 📍 de esa boleta para reintentar.`, 'error');
+  } else if (aproximadas.length) {
+    toast(`✅ Geocodificación completada. ⚠️ ${aproximadas.length} quedaron aproximadas (revisalas en el mapa): ${aproximadas.join(', ')}`);
+  } else {
+    toast('✅ Geocodificación completada, todas exactas.');
+  }
+}
+
+
+// =============================================
+// PAGE: VIAJES PENDIENTES (hoja de ruta por zona)
+// =============================================
+// Cada zona (1 a 6) tiene, como mucho, UN viaje "armado" (pendiente de
+// confirmar) por día. Se arma solo con las boletas de esa zona y se va
+// completando a medida que llegan boletas nuevas de la misma zona. El
+// administrador elige qué camión sale para cada zona; hasta que no
+// confirma, el viaje queda acá (no se borra) y las demás zonas también
+// quedan disponibles para otro día.
+function renderArmar() {
+  return `
+  <div class="page-header">
+    <h1>🗺️ Viajes pendientes por zona</h1>
+    <p>Una hoja de ruta por zona. Queda guardada acá, sumando boletas, hasta que confirmás qué camión sale — no importa cuántos días pasen.</p>
+  </div>
+  <div class="flex gap-3 mb-4" style="flex-wrap:wrap;align-items:center">
+    <button class="btn btn-secondary btn-sm" id="armar-btn">↻ Actualizar viajes pendientes</button>
+  </div>
+  <div id="viajes-preview"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+
+function bindArmarPage() {
+  document.getElementById('armar-btn')?.addEventListener('click', armarViajes);
+  armarViajes();
+}
+
+// =============================================
+// PAGE: BOLETAS POSPUESTAS
+// =============================================
+// Boletas que se sacaron de un viaje armado (con "✕ Sacar") antes de
+// confirmar. Tienen su propia página en el menú para que sean fáciles
+// de encontrar, sin depender de estar parado en "Viajes pendientes".
+function renderPospuestasPage() {
+  return `
+  <div class="page-header">
+    <h1>📋 Boletas pospuestas</h1>
+    <p>Se sacaron de un viaje antes de confirmar. Quedan acá hasta que las agregues a un viaje o las devuelvas a pendientes.</p>
+  </div>
+  <div id="pospuestas-page-content"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+
+async function cargarPospuestasPage() {
+  const cont = document.getElementById('pospuestas-page-content');
+  if (!cont) return;
+
+  const [rPosp, rArmados] = await Promise.all([
+    api('boletas.php?pospuestas=1'),
+    api('viajes.php','POST',{action:'armar',fecha:state.fechaSeleccionada}),
+  ]);
+
+  const viajesArmados = (rArmados.success && rArmados.viajes) ? rArmados.viajes : [];
+  state.viajesArmadosCache = viajesArmados;
+
+  if (!rPosp.success || !rPosp.boletas.length) {
+    cont.innerHTML = '<div class="card"><p class="text-muted">No hay boletas pospuestas por ahora. Cuando saques alguna con el botón "✕ Sacar" en Viajes pendientes, va a aparecer acá.</p></div>';
+    return;
+  }
+
+  cont.innerHTML = `<div style="display:grid;gap:10px">${rPosp.boletas.map(b => `
+    <div class="card">
+      <div class="flex gap-3" style="justify-content:space-between;flex-wrap:wrap;align-items:center">
+        <div>
+          <div style="font-weight:700">${b.cliente}</div>
+          <div class="text-sm text-muted">${b.direccion} · Zona ${b.zona||'—'} · ${b.peso_kg} kg</div>
+        </div>
+        <div class="flex gap-2 items-center">
+          <select class="pospuesta-agregar-sel" data-bid="${b.id}" style="width:180px" ${!viajesArmados.length?'disabled':''}>
+            <option value="">${viajesArmados.length?'Agregar a un viaje...':'No hay viajes armados'}</option>
+            ${viajesArmados.map(v=>`<option value="${v.id}">→ Zona ${v.zona}</option>`).join('')}
+          </select>
+          <button class="btn btn-secondary btn-sm pospuesta-reactivar-btn" data-bid="${b.id}" title="Vuelve a pendiente y se agrupa sola en su zona">↩️ A pendientes</button>
+          <button class="btn btn-danger btn-sm pospuesta-eliminar-btn" data-bid="${b.id}" title="Eliminar definitivamente">🗑 Eliminar</button>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+
+  document.querySelectorAll('.pospuesta-agregar-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      if (!sel.value) return;
+      const r = await api('viajes.php','POST',{action:'agregar_pospuesta_a_viaje', boleta_id:parseInt(sel.dataset.bid), viaje_destino:parseInt(sel.value)});
+      if (r.success) { toast('✅ '+r.message); await cargarPospuestasPage(); }
+      else { toast(r.message||'No se pudo agregar','error'); sel.value=''; }
+    });
+  });
+  document.querySelectorAll('.pospuesta-reactivar-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const r = await api('viajes.php','POST',{action:'reactivar_pospuesta', boleta_id:parseInt(btn.dataset.bid)});
+      if (r.success) { toast('✅ '+r.message); await cargarPospuestasPage(); }
+      else toast(r.message||'Error','error');
+    });
+  });
+  document.querySelectorAll('.pospuesta-eliminar-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar esta boleta definitivamente? No se puede deshacer.')) return;
+      const r = await api(`boletas.php?id=${btn.dataset.bid}`, 'DELETE');
+      if (r.success) { toast('✅ Boleta eliminada'); await cargarPospuestasPage(); }
+      else toast(r.message||'No se pudo eliminar','error');
+    });
+  });
+}
+
+async function armarViajes() {
+  const btn = document.getElementById('armar-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Actualizando...'; }
+
+  const r = await api('viajes.php','POST',{action:'armar',fecha:state.fechaSeleccionada});
+  const repR = await api('repartidores.php');
+  state.repartidores = repR.repartidores || [];
+  state.camiones     = repR.camiones || [];
+  const destR = await api('config_api.php','POST',{action:'listar_destinos'});
+  state.destinos = (destR.success && destR.destinos) ? destR.destinos : [];
+
+  const preview = document.getElementById('viajes-preview');
+  if (btn) { btn.disabled = false; btn.textContent = '↻ Actualizar viajes pendientes'; }
+
+  if (!r.success) { toast(r.message||'Error','error'); return; }
+  state.viajesArmadosCache = r.viajes || [];
+
+  if (!r.viajes.length) {
+    preview.innerHTML = `<div class="card"><p class="text-muted">No hay boletas pendientes. Cargá boletas en PDF desde "Boletas" — cada una arma o completa la hoja de ruta de su zona automáticamente.</p></div>`;
+    return;
+  }
+
+  const disponibles = state.camiones.filter(c => c.estado === 'disponible');
+  const colors = ['#2ecc71','#3B82F6','#F5C518','#E53E3E','#a855f7','#f97316'];
+  // Color FIJO por número de zona: la Zona 1 siempre el mismo color, la
+  // Zona 2 otro, etc. Así, al mover una boleta a otra zona, su punto en
+  // el mapa adopta de inmediato el color y número de la zona destino, sin
+  // depender del orden en que se listan los viajes. Las zonas no
+  // numéricas ("Sin zona") caen a un gris.
+  const colorDeZona = (zona) => {
+    const n = parseInt(zona);
+    if (!isNaN(n) && n >= 1) return colors[(n - 1) % colors.length];
+    return '#9CA3AF';
+  };
+
+  preview.innerHTML = `
+  <h2 style="margin-bottom:16px">Zonas pendientes de salir (${r.viajes.length})</h2>
+  <p class="text-sm text-muted mb-4">Mirá el mapa para ver si dos zonas cercanas conviene mandarlas el mismo día con el mismo camión.</p>
+  <div id="preview-map" style="height:320px;border-radius:12px;margin-bottom:20px;border:1px solid #2E2E2E"></div>
+  ${r.viajes.length > 1 ? `
+  <div class="card mb-4" id="bulk-bar" style="border-left:3px solid var(--verde)">
+    <div class="flex gap-2 items-center" style="flex-wrap:wrap">
+      <strong id="bulk-count" style="min-width:170px">0 zonas seleccionadas</strong>
+      <select id="bulk-cam-sel" style="width:200px" ${!disponibles.length?'disabled':''}>
+        <option value="">${disponibles.length?'Camión para las seleccionadas...':'No hay camiones disponibles'}</option>
+        ${disponibles.map(c=>`<option value="${c.id}" data-cap="${c.capacidad_kg}">🚛 ${c.patente}${c.marca?' — '+c.marca:''}${c.modelo?' '+c.modelo:''} (${c.capacidad_kg} kg)</option>`).join('')}
+      </select>
+      <select id="bulk-rep-sel" style="width:180px">
+        <option value="">Sin repartidor</option>
+        ${state.repartidores.map(rep=>`<option value="${rep.id}">${rep.nombre}</option>`).join('')}
+      </select>
+      <select id="bulk-destino-sel" style="width:180px" title="Dónde termina el viaje">
+        <option value="">🏁 Última entrega (sin elegir punto)</option>
+        ${(state.destinos||[]).map(d=>`<option value="${d.id}">🏁 ${d.nombre}</option>`).join('')}
+      </select>
+      <button class="btn btn-primary btn-sm" id="bulk-confirmar-btn" disabled>✅ Confirmar zonas seleccionadas</button>
+    </div>
+    <div class="text-sm mt-2" id="bulk-cap-alerta"></div>
+    <p class="text-sm text-muted mt-2">Tildá 2 o más zonas para mandarlas el mismo día con un solo camión (ej. zonas vecinas). Se van a unificar en un solo viaje.</p>
+  </div>` : ''}
+  ${r.viajes.map((v,i) => {
+    const color = colorDeZona(v.zona);
+    const pct = disponibles.length ? null : null;
+    return `
+    <div class="viaje-card mb-4" id="viaje-card-${v.id}">
+      <div class="viaje-header">
+        <div class="flex gap-2" style="align-items:flex-start">
+          ${r.viajes.length > 1 ? `<input type="checkbox" class="zona-check" data-vid="${v.id}" data-peso="${parseFloat(v.peso_total)||0}" style="width:20px;height:20px;margin-top:4px" />` : ''}
+          <div>
+            <h3><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};margin-right:6px"></span>🗺️ Zona ${v.zona}</h3>
+            <div class="text-sm text-muted mt-2">${(v.boletas||[]).length} paradas · ${parseFloat(v.peso_total).toFixed(0)} kg</div>
+          </div>
+        </div>
+        <div class="flex gap-2 items-center" style="flex-wrap:wrap">
+          <label class="text-sm text-muted">📅 Sale el:</label>
+          <input type="date" class="dia-salida-input" data-vid="${v.id}" value="${v.dia_salida || ''}" style="width:150px" title="Día planeado de salida (solo para tu organización)" />
+          <select id="cam-sel-${v.id}" style="width:200px" ${!disponibles.length?'disabled':''}>
+            <option value="">${disponibles.length?'Elegí un camión...':'No hay camiones disponibles'}</option>
+            ${disponibles.map(c=>`<option value="${c.id}" data-cap="${c.capacidad_kg}">🚛 ${c.patente}${c.marca?' — '+c.marca:''}${c.modelo?' '+c.modelo:''} (${c.capacidad_kg} kg)</option>`).join('')}
+          </select>
+          <select id="rep-sel-${v.id}" style="width:180px">
+            <option value="">Sin repartidor</option>
+            ${state.repartidores.map(rep=>`<option value="${rep.id}">${rep.nombre}</option>`).join('')}
+          </select>
+          <select id="destino-sel-${v.id}" style="width:180px" title="Dónde termina el viaje">
+            <option value="">🏁 Última entrega (sin elegir punto)</option>
+            ${(state.destinos||[]).map(d=>`<option value="${d.id}">🏁 ${d.nombre}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary btn-sm" id="confirmar-btn-${v.id}">✅ Confirmar salida</button>
+          <button class="btn btn-danger btn-sm" id="eliminar-armado-btn-${v.id}" title="Borrar este viaje y sus boletas">🗑 Eliminar viaje</button>
+        </div>
+      </div>
+      <div class="text-sm mt-2" id="cap-alerta-${v.id}"></div>
+      <div class="viaje-body">
+        ${(v.boletas||[]).map((b,j) => `
+        <div class="parada-row">
+          <div class="parada-num">${j+1}</div>
+          <div class="parada-info">
+            <div class="parada-cliente">${b.cliente}</div>
+            <div class="parada-dir">${b.direccion} <span class="text-muted">· Zona ${b.zona||'—'}</span></div>
+            <div class="parada-peso">${b.peso_kg} kg</div>
+          </div>
+          <div class="flex gap-2 items-center">
+            ${r.viajes.length > 1 ? `
+            <select class="mover-boleta-sel" data-bid="${b.id}" style="width:150px;font-size:12px" title="Mover a otro viaje">
+              <option value="">Mover a...</option>
+              ${r.viajes.filter(x=>x.id!==v.id).map(x=>`<option value="${x.id}">→ Zona ${x.zona}</option>`).join('')}
+            </select>` : ''}
+            <button class="btn btn-danger btn-sm sacar-parada-btn" data-bid="${b.id}" title="Sacar del viaje y dejar pendiente">✕ Sacar</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')}`;
+
+  setTimeout(async () => {
+    await cargarGoogleMaps();
+    const map = new google.maps.Map(document.getElementById('preview-map'), {
+      center: { lat: FABRICA.lat, lng: FABRICA.lon }, zoom: 11, mapTypeControl: false, streetViewControl: false,
+    });
+    new google.maps.Marker({
+      position: { lat: FABRICA.lat, lng: FABRICA.lon }, map,
+      label: { text: '🏭', fontSize: '18px' }, title: 'Punto de partida',
+    });
+    r.viajes.forEach((v) => {
+      const color = colorDeZona(v.zona);
+      (v.boletas||[]).forEach((b) => {
+        if (!b.lat||!b.lon) return;
+        const marker = new google.maps.Marker({
+          position: { lat: parseFloat(b.lat), lng: parseFloat(b.lon) }, map,
+          label: { text: String(v.zona), color: '#fff', fontWeight: '700' },
+          icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 14 },
+        });
+        const info = new google.maps.InfoWindow({ content: `<div style="color:#1a1a1a;font-size:13px"><strong>Zona ${v.zona} · ${b.cliente}</strong><br>${b.direccion}</div>` });
+        marker.addListener('click', () => info.open(map, marker));
+      });
+    });
+  }, 200);
+
+  r.viajes.forEach(v => {
+    const sel = document.getElementById(`cam-sel-${v.id}`);
+    sel?.addEventListener('change', () => {
+      const opt = sel.selectedOptions[0];
+      const alerta = document.getElementById(`cap-alerta-${v.id}`);
+      if (!opt || !opt.value) { alerta.innerHTML=''; return; }
+      const cap = parseFloat(opt.dataset.cap||0);
+      const pct = cap ? (parseFloat(v.peso_total)/cap)*100 : 0;
+      if (pct > 100) alerta.innerHTML = `⚠️ <strong>Sobrecargado</strong> (${pct.toFixed(0)}% de la capacidad)`;
+      else if (pct < 30) alerta.innerHTML = `ℹ️ Camión subutilizado (${pct.toFixed(0)}% de la capacidad)`;
+      else alerta.innerHTML = `✅ Carga adecuada (${pct.toFixed(0)}% de la capacidad)`;
+    });
+    document.getElementById(`confirmar-btn-${v.id}`)?.addEventListener('click', () => confirmarViaje(v.id));
+    document.getElementById(`eliminar-armado-btn-${v.id}`)?.addEventListener('click', () => eliminarViajeArmado(v.id, v.zona));
+  });
+
+  // Guardar día de salida planeado de cada zona (solo planificación admin)
+  document.querySelectorAll('.dia-salida-input').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      const r = await api('viajes.php','POST',{action:'dia_salida', viaje_id:parseInt(inp.dataset.vid), dia_salida:inp.value});
+      toast(r.success ? '📅 Día de salida guardado' : (r.message||'Error'), r.success?undefined:'error');
+    });
+  });
+
+  // Mover una boleta suelta al viaje de otra zona (para aprovechar
+  // cercanía y ahorrar un recorrido).
+  document.querySelectorAll('.mover-boleta-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      if (!sel.value) return;
+      const r = await api('viajes.php','POST',{action:'mover_boleta', boleta_id:parseInt(sel.dataset.bid), viaje_destino:parseInt(sel.value)});
+      if (r.success) { toast('✅ '+r.message); await armarViajes(); }
+      else { toast(r.message||'No se pudo mover','error'); sel.value=''; }
+    });
+  });
+
+  // Sacar una boleta del viaje (antes de confirmar): vuelve a pendiente
+  // para reasignarla otro día. Ej: el cliente avisó que ese día no recibe.
+  document.querySelectorAll('.sacar-parada-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('¿Sacar esta boleta del viaje? Queda guardada en "Boletas pospuestas" hasta que la agregues a otro viaje.')) return;
+      const r = await api('viajes.php','POST',{action:'quitar_parada', boleta_id:parseInt(btn.dataset.bid)});
+      if (r.success) { toast('✅ '+r.message); await armarViajes(); }
+      else toast(r.message||'Error','error');
+    });
+  });
+
+  // Selección múltiple: tildar 2+ zonas para confirmarlas juntas con un
+  // mismo camión (útil cuando dos zonas quedan cerca en el mapa).
+  const bulkBtn = document.getElementById('bulk-confirmar-btn');
+  const bulkCount = document.getElementById('bulk-count');
+  const bulkCamSel = document.getElementById('bulk-cam-sel');
+  function actualizarBulk() {
+    const marcados = Array.from(document.querySelectorAll('.zona-check:checked'));
+    if (bulkCount) bulkCount.textContent = `${marcados.length} zona${marcados.length===1?'':'s'} seleccionada${marcados.length===1?'':'s'}`;
+    if (bulkBtn) bulkBtn.disabled = marcados.length < 2 || !bulkCamSel?.value;
+    const alerta = document.getElementById('bulk-cap-alerta');
+    if (!alerta) return;
+    const opt = bulkCamSel?.selectedOptions[0];
+    if (marcados.length < 2 || !opt?.value) { alerta.innerHTML=''; return; }
+    const pesoTotal = marcados.reduce((s,chk) => s + (parseFloat(chk.dataset.peso) || 0), 0);
+    const cap = parseFloat(opt.dataset.cap||0);
+    const pct = cap ? (pesoTotal/cap)*100 : 0;
+    alerta.innerHTML = pct > 100
+      ? `⚠️ <strong>Sobrecargado</strong>: ${pesoTotal.toFixed(0)} kg de las zonas juntas vs ${cap} kg de capacidad (${pct.toFixed(0)}%)`
+      : `✅ ${pesoTotal.toFixed(0)} kg de las zonas juntas — ${pct.toFixed(0)}% de la capacidad del camión`;
+  }
+  document.querySelectorAll('.zona-check').forEach(chk => chk.addEventListener('change', actualizarBulk));
+  bulkCamSel?.addEventListener('change', actualizarBulk);
+  bulkBtn?.addEventListener('click', () => {
+    const ids = Array.from(document.querySelectorAll('.zona-check:checked')).map(chk => parseInt(chk.dataset.vid));
+    confirmarVariasJuntas(ids);
+  });
+}
+
+async function confirmarVariasJuntas(viajeIds) {
+  const camion_id = parseInt(document.getElementById('bulk-cam-sel')?.value || 0) || null;
+  const repartidor_id = parseInt(document.getElementById('bulk-rep-sel')?.value || 0) || null;
+  const destino_id = parseInt(document.getElementById('bulk-destino-sel')?.value || 0) || null;
+  if (!camion_id) { toast('Elegí el camión para las zonas seleccionadas', 'error'); return; }
+
+  const asignaciones = viajeIds.map(viaje_id => ({viaje_id, camion_id, repartidor_id, destino_id}));
+  const r = await api('viajes.php','POST',{action:'confirmar',fecha:state.fechaSeleccionada,asignaciones});
+  if (r.success) {
+    toast(`✅ ${viajeIds.length} zonas unificadas en un solo viaje con el mismo camión.`);
+    await armarViajes();
+  } else {
+    toast(r.message||'No se pudo confirmar','error');
+  }
+}
+
+async function eliminarViajeArmado(viaje_id, zona) {
+  if (!confirm(`¿Eliminar el viaje pendiente de la Zona ${zona}? Se van a borrar también sus boletas — si hacen falta, hay que volver a cargarlas.`)) return;
+  const r = await api('viajes.php','POST',{action:'eliminar_armado',viaje_id:parseInt(viaje_id)});
+  if (r.success) { toast('✅ '+r.message); await armarViajes(); }
+  else toast(r.message||'Error','error');
+}
+
+async function confirmarViaje(viaje_id) {
+  const camion_id = parseInt(document.getElementById(`cam-sel-${viaje_id}`)?.value || 0) || null;
+  const repartidor_id = parseInt(document.getElementById(`rep-sel-${viaje_id}`)?.value || 0) || null;
+  const destino_id = parseInt(document.getElementById(`destino-sel-${viaje_id}`)?.value || 0) || null;
+  if (!camion_id) { toast('Elegí el camión que va a salir para esta zona', 'error'); return; }
+
+  const r = await api('viajes.php','POST',{action:'confirmar',fecha:state.fechaSeleccionada,asignaciones:[{viaje_id,camion_id,repartidor_id,destino_id}]});
+  if (r.success) {
+    toast('✅ Viaje confirmado. El camión ya figura "en viaje".');
+    await armarViajes();
+  } else {
+    toast(r.message||'No se pudo confirmar','error');
+  }
+}
+
+// =============================================
+// PAGE: VIAJES ADMIN
+// =============================================
+function renderViajesAdmin() {
+  return `
+  <div class="page-header"><h1>🚛 Viajes del día</h1><p>Estado en tiempo real.</p></div>
+  <div class="flex gap-3 mb-4" style="align-items:center;flex-wrap:wrap">
+    <input type="date" id="fecha-viajes" value="${state.fechaSeleccionada}" style="width:auto" />
+    <button class="btn btn-secondary btn-sm" id="refresh-viajes">↻ Actualizar</button>
+  </div>
+  <div id="viajes-admin-list"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+
+async function loadViajesAdmin() {
+  const [r, rSinAsignar] = await Promise.all([
+    api(`viajes.php?fecha=${state.fechaSeleccionada}`),
+    api('boletas.php?sin_asignar=1'),
+  ]);
+  if (!r.success) return;
+  state.viajesAdmin = r.viajes;
+  state.boletasSinAsignar = (rSinAsignar.success && rSinAsignar.boletas) ? rSinAsignar.boletas : [];
+  renderViajesAdminList();
+  document.getElementById('fecha-viajes')?.addEventListener('change', e => { state.fechaSeleccionada=e.target.value; loadViajesAdmin(); });
+  document.getElementById('refresh-viajes')?.addEventListener('click', loadViajesAdmin);
+}
+
+function renderViajesAdminList() {
+  const el = document.getElementById('viajes-admin-list');
+  if (!el) return;
+  const estadoTag = {armado:`<span class="tag tag-gris">Pendiente</span>`,confirmado:`<span class="tag tag-amarillo">Confirmado</span>`,en_curso:`<span class="tag tag-azul">En curso 🔵</span>`,finalizado:`<span class="tag tag-verde">Finalizado ✓</span>`};
+  if (!state.viajesAdmin.length) {
+    el.innerHTML='<div class="card"><p class="text-muted">No hay viajes para esta fecha. <button class="btn btn-primary btn-sm" onclick="state.page=\'armar\';loadCurrentAdminPage()">→ Ver viajes pendientes</button></p></div>';
+    return;
+  }
+  el.innerHTML = state.viajesAdmin.map(v => `
+  <div class="viaje-card">
+    <div class="viaje-header">
+      <div>
+        <h3>🚛 ${v.patente||'Sin camión'} — Zona ${v.zona||'—'}</h3>
+        <div class="flex gap-2 items-center mt-2">
+          ${estadoTag[v.estado]||''} ${v.repartidor_nombre?`<span class="tag tag-gris">👤 ${v.repartidor_nombre}</span>`:''}
+          <span class="text-sm text-muted">${v.peso_total} kg · ${(v.boletas||[]).length} paradas</span>
+        </div>
+        ${v.started_at?`<div class="text-sm text-muted mt-2">▶ Inicio: ${formatTime(v.started_at)}</div>`:''}
+        ${v.finished_at?`<div class="text-sm text-muted">✓ Fin: ${formatTime(v.finished_at)}</div>`:''}
+      </div>
+      <div class="flex gap-2" style="flex-direction:column;align-items:flex-end">
+        ${v.estado==='armado'?`<button class="btn btn-secondary btn-sm" onclick="state.page='armar';loadCurrentAdminPage()">🚛 Elegir camión y confirmar →</button>`:''}
+        ${(v.estado==='confirmado'||v.estado==='en_curso')?`<button class="btn btn-danger btn-sm" data-cancelar-viaje="${v.id}">✕ Cancelar viaje</button>`:''}
+      </div>
+    </div>
+    ${(v.estado==='confirmado'||v.estado==='en_curso')?`
+    <div class="flex gap-2 items-center" style="padding:0 16px 12px;flex-wrap:wrap">
+      <select class="agregar-parada-sel" data-vid="${v.id}" style="width:260px" ${!(state.boletasSinAsignar||[]).length?'disabled':''}>
+        <option value="">${(state.boletasSinAsignar||[]).length?'➕ Agregar una boleta a este viaje...':'No hay boletas sueltas para agregar'}</option>
+        ${(state.boletasSinAsignar||[]).map(b=>`<option value="${b.id}">${b.cliente} — ${b.direccion} (${b.peso_kg} kg)</option>`).join('')}
+      </select>
+    </div>`:''}
+    <div class="viaje-body">
+      ${(v.boletas||[]).map((b,i)=>`
+      <div class="parada-row">
+        <div class="parada-num" style="${b.estado==='entregada'?'background:var(--gris-cl)':''}">${i+1}</div>
+        <div class="parada-info">
+          <div class="parada-cliente" style="${b.estado==='entregada'?'text-decoration:line-through;opacity:.5':''}">${b.cliente}</div>
+          <div class="parada-dir">${b.direccion}</div>
+          <div class="parada-peso">${b.peso_kg} kg ${b.estado==='entregada'?`<span class="tag tag-verde" style="font-size:18px">Entregado${b.entregada_at?' '+formatTime(b.entregada_at):''}</span>`:''}</div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`).join('');
+  document.querySelectorAll('[data-cancelar-viaje]').forEach(btn=>{
+    btn.addEventListener('click', () => cancelarViaje(btn.dataset.cancelarViaje));
+  });
+  document.querySelectorAll('.agregar-parada-sel').forEach(sel=>{
+    sel.addEventListener('change', async () => {
+      if (!sel.value) return;
+      const r = await api('viajes.php','POST',{action:'agregar_parada_viaje_activo', boleta_id:parseInt(sel.value), viaje_id:parseInt(sel.dataset.vid)});
+      if (r.success) { toast('✅ '+r.message); await loadViajesAdmin(); }
+      else { toast(r.message||'No se pudo agregar','error'); sel.value=''; }
+    });
+  });
+}
+
+async function cancelarViaje(viaje_id) {
+  if (!confirm('¿Cancelar este viaje? El camión queda disponible de nuevo y las boletas que faltan entregar vuelven a quedar pendientes (se van a reasignar solas a la zona).')) return;
+  const r = await api('viajes.php','POST',{action:'cancelar',viaje_id:parseInt(viaje_id)});
+  if (r.success) { toast('✅ '+r.message); loadViajesAdmin(); }
+  else toast(r.message||'Error','error');
+}
+
+// =============================================
+// PAGE: HISTÓRICO DE VIAJES
+// =============================================
+// Todos los viajes que se hicieron o están en curso (no incluye las
+// zonas todavía "armadas" pendientes de confirmar — esas están en
+// "Viajes pendientes"). Se puede cancelar/eliminar cualquiera desde acá.
+function renderHistorico() {
+  return `
+  <div class="page-header">
+    <h1>🗂️ Histórico de viajes</h1>
+    <p>Todos los viajes confirmados, en curso o finalizados — camión, repartidor, fecha y hora.</p>
+  </div>
+  <div id="historico-lista"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+
+async function loadHistorico() {
+  const r = await api('viajes.php?historico=1');
+  const el = document.getElementById('historico-lista');
+  if (!el) return;
+  if (!r.success || !r.viajes.length) {
+    el.innerHTML = '<div class="card"><p class="text-muted">Todavía no hay viajes confirmados ni finalizados.</p></div>';
+    return;
+  }
+  const estadoTag = {confirmado:'<span class="tag tag-amarillo">Confirmado</span>',en_curso:'<span class="tag tag-azul">En curso 🔵</span>',finalizado:'<span class="tag tag-verde">Finalizado ✓</span>'};
+  el.innerHTML = `<div style="display:grid;gap:10px">${r.viajes.map(v => `
+    <div class="card">
+      <div class="flex gap-3 items-center" style="flex-wrap:wrap;justify-content:space-between">
+        <div>
+          <div style="font-weight:700">🗺️ Zona ${v.zona||'—'} · 🚛 ${v.patente||'Sin camión'} · 👤 ${v.repartidor_nombre||'Sin repartidor'}</div>
+          <div class="text-sm text-muted mt-2">
+            ${estadoTag[v.estado]||v.estado} · 📅 ${v.fecha}
+            ${v.started_at?` · ▶ ${formatTime(v.started_at)}`:''}
+            ${v.finished_at?` · ✓ ${formatTime(v.finished_at)}`:''}
+            · ${(v.boletas||[]).length} paradas · ${parseFloat(v.peso_total||0).toFixed(0)} kg
+          </div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="eliminarDeHistorico(${v.id})">✕ Eliminar</button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+async function eliminarDeHistorico(viaje_id) {
+  if (!confirm('¿Eliminar este viaje del histórico? Si está confirmado o en curso, el camión queda disponible de nuevo y las boletas no entregadas vuelven a quedar pendientes.')) return;
+  const r = await api('viajes.php','POST',{action:'cancelar',viaje_id:parseInt(viaje_id)});
+  if (r.success) { toast('✅ Viaje eliminado'); loadHistorico(); }
+  else toast(r.message||'Error','error');
+}
+
+// =============================================
+// PAGE: ALERTAS
+// =============================================
+function renderAlertas() {
+  return `<div class="page-header"><h1>🔔 Alertas</h1><p>Notificaciones de viajes finalizados.</p></div>
+  <div id="alertas-list"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+async function loadAlertas() {
+  const [r1, r2] = await Promise.all([
+    api('alertas.php'),
+    api('tracking.php?action=alertas')
+  ]);
+
+  const el = document.getElementById('alertas-list');
+  if (!el) return;
+
+  const iconos = {desvio:'⚠️', finalizacion:'✅', sobrecarga:'🔴', subutilizacion:'🟡'};
+  const colores = {desvio:'var(--amarillo)', finalizacion:'var(--verde)', sobrecarga:'var(--rojo)', subutilizacion:'var(--amarillo)'};
+
+  const alertasSistema = r2.success ? r2.alertas : [];
+  const alertasViajes  = r1.success ? r1.alertas : [];
+
+  // Marcar leídas
+  if (alertasSistema.filter(a=>!a.leida).length > 0) {
+    api('tracking.php','POST',{action:'leer'}).catch(()=>{});
+  }
+
+  if (!alertasSistema.length && !alertasViajes.length) {
+    el.innerHTML='<div class="card"><p class="text-muted">No hay alertas recientes.</p></div>';
+    return;
+  }
+
+  el.innerHTML = `
+  ${alertasSistema.length ? `
+  <h3 style="margin-bottom:12px">🔔 Alertas del sistema</h3>
+  ${alertasSistema.map(a=>`
+  <div class="alerta-item" style="border-left:3px solid ${colores[a.tipo]||'var(--verde)'}">
+    <div class="alerta-icon">${iconos[a.tipo]||'ℹ️'}</div>
+    <div class="alerta-text">
+      <h4>${a.tipo==='desvio'?'Desvío de ruta':a.tipo==='sobrecarga'?'Sobrecarga':a.tipo==='subutilizacion'?'Subutilización':'Alerta'}</h4>
+      <p>${a.mensaje} ${a.patente?'· 🚛 '+a.patente:''} ${a.repartidor?'· 👤 '+a.repartidor:''}</p>
+      <p class="text-sm text-muted">${formatTime(a.timestamp)} ${!a.leida?'<span class="tag tag-rojo" style="font-size:14px">Nuevo</span>':''}</p>
+    </div>
+  </div>`).join('')}
+  <div style="margin:16px 0;border-top:1px solid var(--borde)"></div>` : ''}
+
+  ${alertasViajes.length ? `
+  <h3 style="margin-bottom:12px">✅ Viajes finalizados</h3>
+  ${alertasViajes.map(a=>`
+  <div class="alerta-item">
+    <div class="alerta-icon">✅</div>
+    <div class="alerta-text">
+      <h4>Viaje finalizado — ${a.zona||'Sin zona'}</h4>
+      <p>🚛 ${a.patente||'-'} · 👤 ${a.repartidor||'Sin asignar'} · ⚖️ ${a.peso_total} kg · ${formatTime(a.finished_at)}</p>
+    </div>
+  </div>`).join('')}` : ''}`;
+}
+
+// =============================================
+// PAGE: TRACKING (RF09)
+// =============================================
+function renderTracking() {
+  return `
+  <div class="page-header">
+    <h1>📡 Tracking en tiempo real</h1>
+    <p>Ubicación de los camiones en ruta ahora mismo.</p>
+  </div>
+  <div id="tracking-map" style="height:450px;border-radius:12px;border:1px solid var(--borde);margin-bottom:20px"></div>
+  <div id="tracking-lista"></div>`;
+}
+
+let trackingMapObj = null, trackingInterval = null;
+
+async function loadTracking() {
+  await cargarGoogleMaps();
+  trackingMapObj = new google.maps.Map(document.getElementById('tracking-map'), {
+    center: { lat: -34.60, lng: -58.45 }, zoom: 11, streetViewControl: false,
+  });
+  trackingMarkers = {};
+
+  new google.maps.Marker({
+    position: { lat: FABRICA.lat, lng: FABRICA.lon }, map: trackingMapObj,
+    label: { text: '🏭', fontSize: '14px' }, title: 'Fábrica Tres Reyes',
+  });
+
+  await refreshTracking();
+
+  // Auto-refresh cada 15 segundos
+  if (trackingInterval) clearInterval(trackingInterval);
+  trackingInterval = setInterval(async () => {
+    if (state.page === 'tracking') await refreshTracking();
+    else clearInterval(trackingInterval);
+  }, 15000);
+}
+
+let trackingMarkers = {};
+let trackingParadaMarkers = {}; // un marcador numerado por CADA parada pendiente (clave: id de boleta)
+let trackingDestinoMarkers = {}; // marcador del PUNTO DE FINALIZACIÓN de cada viaje (clave: viaje_id)
+
+async function refreshTracking() {
+  const r = await api('tracking.php?action=live');
+  const lista = document.getElementById('tracking-lista');
+  if (!r.success) return;
+
+  if (!r.positions.length) {
+    if (lista) lista.innerHTML = '<div class="card"><p class="text-muted">No hay camiones en ruta ahora mismo.</p></div>';
+    return;
+  }
+
+  const colors = ['#2ecc71','#3B82F6','#F5C518','#E53E3E'];
+
+  r.positions.forEach((p, i) => {
+    const lat = parseFloat(p.lat), lon = parseFloat(p.lon);
+    const color = colors[i % colors.length];
+    const popup = `<div style="color:#1a1a1a;font-size:13px"><strong>🚛 ${p.patente}</strong><br>👤 ${p.repartidor}<br>📍 ${p.zona}<br>✅ ${p.entregadas}/${p.total_paradas} entregas<br><small>±${Math.round(p.accuracy||0)}m · ${new Date(p.timestamp).toLocaleTimeString('es-AR')}</small></div>`;
+
+    if (trackingMarkers[p.viaje_id]) {
+      // Solo mover el marcador existente (no recrear el mapa: no cuenta
+      // como carga nueva de Google Maps).
+      trackingMarkers[p.viaje_id].marker.setPosition({ lat, lng: lon });
+      trackingMarkers[p.viaje_id].info.setContent(popup);
+    } else {
+      const marker = new google.maps.Marker({
+        position: { lat, lng: lon }, map: trackingMapObj,
+        icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3, scale: 16 },
+        label: { text: '🚛', fontSize: '16px' }, zIndex: 999,
+      });
+      const info = new google.maps.InfoWindow({ content: popup });
+      marker.addListener('click', () => info.open(trackingMapObj, marker));
+      trackingMarkers[p.viaje_id] = { marker, info };
+    }
+
+    // Todas las paradas PENDIENTES de este camión, numeradas en el orden
+    // real de la ruta (1 = próxima, 2 = siguiente, etc.). Apenas el
+    // repartidor marca una como entregada, deja de venir en "pendientes"
+    // y su marcador se saca del mapa en la limpieza de más abajo.
+    const pendientes = (p.paradas || []).filter(b => b.estado !== 'entregada' && b.lat && b.lon);
+    pendientes.forEach((b, idx) => {
+      try {
+        // Separación visual: si dos o más puntos caen prácticamente en el
+        // mismo lugar (ej. boletas de prueba cerca de la fábrica, o el
+        // camión parado justo sobre una entrega), Google los dibuja todos
+        // superpuestos y el de más arriba tapa al resto. Acá se los
+        // reparte en un pequeño círculo (unos metros) SOLO para que se
+        // puedan distinguir en el mapa — no cambia la ubicación real
+        // guardada, es puramente para verlos.
+        const anguloDorado = idx * 137.5 * Math.PI / 180;
+        const radio = 0.00007; // ~7-8 metros
+        const bLat = parseFloat(b.lat) + radio * Math.cos(anguloDorado);
+        const bLon = parseFloat(b.lon) + radio * Math.sin(anguloDorado);
+        const infoParada = `<div style="color:#1a1a1a;font-size:13px"><strong>${idx+1}. ${b.cliente}</strong><br>${b.direccion}<br><small>Camión ${p.patente}</small></div>`;
+        if (trackingParadaMarkers[b.id]) {
+          trackingParadaMarkers[b.id].marker.setPosition({ lat: bLat, lng: bLon });
+          trackingParadaMarkers[b.id].marker.setLabel({ text: String(idx+1), color:'#fff', fontWeight:'700', fontSize:'11px' });
+          trackingParadaMarkers[b.id].info.setContent(infoParada);
+        } else {
+          const paradaMarker = new google.maps.Marker({
+            position: { lat: bLat, lng: bLon }, map: trackingMapObj,
+            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 12 },
+            label: { text: String(idx+1), color:'#fff', fontWeight:'700', fontSize:'11px' },
+          });
+          const infoP = new google.maps.InfoWindow({ content: infoParada });
+          paradaMarker.addListener('click', () => infoP.open(trackingMapObj, paradaMarker));
+          trackingParadaMarkers[b.id] = { marker: paradaMarker, info: infoP };
+        }
+      } catch (e) {
+        console.error('[TR Tracking] Error dibujando la parada', b.id, b.cliente, ':', e);
+      }
+    });
+
+    // Punto de finalización de este viaje (si el admin eligió uno al
+    // confirmar). Se muestra como una banderita gris. Si no eligió
+    // ninguno, no se dibuja nada acá — el viaje termina en la última
+    // entrega, que ya se ve numerada más arriba.
+    try {
+      if (p.destino_lat && p.destino_lon) {
+        const dLat = parseFloat(p.destino_lat), dLon = parseFloat(p.destino_lon);
+        const infoDestino = `<div style="color:#1a1a1a;font-size:13px"><strong>🏁 ${p.destino_nombre || 'Punto de finalización'}</strong><br><small>Fin del recorrido de ${p.patente}</small></div>`;
+        if (trackingDestinoMarkers[p.viaje_id]) {
+          trackingDestinoMarkers[p.viaje_id].marker.setPosition({ lat: dLat, lng: dLon });
+          trackingDestinoMarkers[p.viaje_id].info.setContent(infoDestino);
+        } else {
+          const destinoMarker = new google.maps.Marker({
+            position: { lat: dLat, lng: dLon }, map: trackingMapObj,
+            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#6b7280', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 12 },
+            label: { text: '🏁', fontSize: '12px' },
+          });
+          const infoD = new google.maps.InfoWindow({ content: infoDestino });
+          destinoMarker.addListener('click', () => infoD.open(trackingMapObj, destinoMarker));
+          trackingDestinoMarkers[p.viaje_id] = { marker: destinoMarker, info: infoD };
+        }
+      }
+    } catch (e) {
+      console.error('[TR Tracking] Error dibujando el destino del viaje', p.viaje_id, ':', e);
+    }
+  });
+
+  // Sacar del mapa los camiones cuyo viaje ya no está activo (terminó,
+  // se canceló) — antes se quedaban pegados en el mapa para siempre.
+  const activos = new Set(r.positions.map(p => p.viaje_id));
+  Object.keys(trackingMarkers).forEach(vid => {
+    if (!activos.has(Number(vid))) { trackingMarkers[vid].marker.setMap(null); delete trackingMarkers[vid]; }
+  });
+  Object.keys(trackingDestinoMarkers).forEach(vid => {
+    if (!activos.has(Number(vid))) { trackingDestinoMarkers[vid].marker.setMap(null); delete trackingDestinoMarkers[vid]; }
+  });
+
+  // Sacar del mapa las paradas que ya no están pendientes: se
+  // entregaron, o su viaje ya no está activo.
+  const pendientesIds = new Set();
+  r.positions.forEach(p => (p.paradas||[]).forEach(b => { if (b.estado !== 'entregada') pendientesIds.add(b.id); }));
+  Object.keys(trackingParadaMarkers).forEach(bid => {
+    if (!pendientesIds.has(Number(bid))) { trackingParadaMarkers[bid].marker.setMap(null); delete trackingParadaMarkers[bid]; }
+  });
+
+  if (lista) {
+    lista.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+    ${r.positions.map((p,i)=>`
+    <div class="card">
+      <div class="flex items-center gap-3 mb-4">
+        <div style="width:44px;height:44px;background:${colors[i%colors.length]};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px">🚛</div>
+        <div><div style="font-weight:700">${p.patente}</div><div class="text-sm text-muted">${p.repartidor}</div></div>
+        <span class="tag tag-azul" style="margin-left:auto">En ruta</span>
+      </div>
+      <div class="text-sm"><b>Zona:</b> ${p.zona||'-'}</div>
+      <div class="text-sm mt-2 mb-2"><b>Entregas:</b> ${p.entregadas} / ${p.total_paradas}</div>
+      ${renderLineaParadas(p.paradas||[])}
+      <div class="text-sm text-muted mt-2">Actualizado: ${new Date(p.timestamp).toLocaleTimeString('es-AR')}</div>
+    </div>`).join('')}
+    </div>`;
+  }
+}
+
+// Línea horizontal de progreso: un círculo por parada, en orden. Los ya
+// entregados quedan marcados (verde con ✓); el tramo de línea entre dos
+// entregados también se pinta de verde, mostrando el avance del reparto.
+function renderLineaParadas(paradas) {
+  if (!paradas.length) return '';
+  const n = paradas.length;
+  return `
+  <div style="display:flex;align-items:flex-start;overflow-x:auto;padding:6px 2px 2px">
+    ${paradas.map((b,idx)=>{
+      const hecho = b.estado==='entregada';
+      // ¿el tramo de línea que llega a este círculo va pintado? (si el
+      // anterior también está entregado)
+      const prevHecho = idx>0 && paradas[idx-1].estado==='entregada';
+      const linea = idx===0 ? '' :
+        `<div style="flex:1;height:3px;margin-top:13px;min-width:14px;background:${prevHecho&&hecho?'var(--verde)':'var(--gris-cl,#3a3a3a)'}"></div>`;
+      const circ = `
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:30px">
+          <div title="${(b.cliente||'').replace(/"/g,'&quot;')}${b.entregada_at?' · '+new Date(b.entregada_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):''}"
+               style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid ${hecho?'var(--verde)':'var(--borde,#3a3a3a)'};background:${hecho?'var(--verde)':'transparent'};color:${hecho?'#fff':'var(--texto-2,#999)'}">
+            ${hecho?'✓':(idx+1)}
+          </div>
+        </div>`;
+      return linea + circ;
+    }).join('')}
+  </div>`;
+}
+
+// =============================================
+// PAGE: REPORTES (RF10)
+// =============================================
+function renderReportes() {
+  return `
+  <div class="page-header">
+    <h1>📊 Reportes de eficiencia</h1>
+    <p>Historial de rutas y métricas de desempeño.</p>
+  </div>
+  <div class="flex gap-3 mb-4" style="flex-wrap:wrap;align-items:center">
+    <input type="date" id="rep-desde" style="width:auto" />
+    <input type="date" id="rep-hasta" style="width:auto" />
+    <button class="btn btn-primary btn-sm" id="rep-buscar-btn">Buscar</button>
+  </div>
+  <div id="reportes-contenido"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+
+async function loadReportes() {
+  const hoy = fechaLocal();
+  const hace7 = fechaLocal(new Date(Date.now()-7*86400000));
+  document.getElementById('rep-desde').value = hace7;
+  document.getElementById('rep-hasta').value = hoy;
+  document.getElementById('rep-buscar-btn')?.addEventListener('click', buscarReportes);
+  await buscarReportes();
+}
+
+async function buscarReportes() {
+  const desde = document.getElementById('rep-desde').value;
+  const hasta = document.getElementById('rep-hasta').value;
+  const r = await api(`viajes.php?fecha=${desde}&hasta=${hasta}&reporte=1`);
+  const el = document.getElementById('reportes-contenido');
+  if (!el) return;
+
+  // Stats globales
+  const viajes = r.viajes || [];
+  const finalizados = viajes.filter(v=>v.estado==='finalizado');
+  const totalKm = finalizados.reduce((s,v)=>s+(v.km_estimado||0),0);
+  const totalTiempo = finalizados.reduce((s,v)=>{
+    if(!v.started_at||!v.finished_at) return s;
+    return s+(new Date(v.finished_at)-new Date(v.started_at))/60000;
+  },0);
+  const combustible = totalKm * 0.10; // 10L/100km
+
+  el.innerHTML = `
+  <div class="stats-grid mb-4">
+    <div class="stat-card"><div class="num">${finalizados.length}</div><div class="lbl">Viajes completados</div></div>
+    <div class="stat-card"><div class="num">${totalKm.toFixed(0)} km</div><div class="lbl">Distancia total estimada</div></div>
+    <div class="stat-card"><div class="num">${Math.round(totalTiempo/60)} hs</div><div class="lbl">Tiempo total en ruta</div></div>
+    <div class="stat-card"><div class="num">${combustible.toFixed(0)} L</div><div class="lbl">Combustible estimado</div></div>
+  </div>
+
+  ${finalizados.length === 0 ? '<div class="card"><p class="text-muted">No hay viajes finalizados en ese período.</p></div>' : ''}
+
+  <div style="display:grid;gap:16px">
+  ${finalizados.map(v=>{
+    const durMin = v.started_at && v.finished_at ? Math.round((new Date(v.finished_at)-new Date(v.started_at))/60000) : null;
+    const km = v.km_estimado || 0;
+    const comb = (km * 0.10).toFixed(1);
+    const eficiencia = v.peso_total && v.km_estimado ? (v.peso_total / Math.max(km,1)).toFixed(1) : '-';
+    return `
+    <div class="card">
+      <div class="flex items-center gap-3 mb-4" style="flex-wrap:wrap">
+        <div><h3 style="font-size:18px;font-weight:700">🚛 ${v.patente||'Sin camión'}</h3>
+        <div class="text-sm text-muted">${v.zona||'-'} · ${formatTime(v.fecha)}</div></div>
+        <span class="tag tag-verde" style="margin-left:auto">✓ Finalizado</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
+        <div><div class="text-sm text-muted">Repartidor</div><div style="font-weight:600">👤 ${v.repartidor_nombre||'-'}</div></div>
+        <div><div class="text-sm text-muted">Paradas</div><div style="font-weight:600">📍 ${(v.boletas||[]).length}</div></div>
+        <div><div class="text-sm text-muted">Peso</div><div style="font-weight:600">⚖️ ${v.peso_total} kg</div></div>
+        <div><div class="text-sm text-muted">Distancia est.</div><div style="font-weight:600">🛣️ ${km.toFixed(1)} km</div></div>
+        <div><div class="text-sm text-muted">Combustible est.</div><div style="font-weight:600">⛽ ${comb} L</div></div>
+        <div><div class="text-sm text-muted">Duración</div><div style="font-weight:600">⏱ ${durMin ? durMin+'min' : '-'}</div></div>
+        ${v.started_at?`<div><div class="text-sm text-muted">Salida</div><div style="font-weight:600">${formatTime(v.started_at)}</div></div>`:''}
+        ${v.finished_at?`<div><div class="text-sm text-muted">Regreso</div><div style="font-weight:600">${formatTime(v.finished_at)}</div></div>`:''}
+      </div>
+    </div>`;
+  }).join('')}
+  </div>`;
+}
+
+// =============================================
+// PAGE: CONFIGURACIÓN
+// =============================================
+function renderConfig() {
+  return `
+  <div class="page-header"><h1>⚙️ Configuración</h1><p>Administrá repartidores, camiones y preferencias.</p></div>
+  <div class="section-tabs mb-4">
+    <button class="tab-btn active" data-tab="repartidores">👤 Repartidores</button>
+    <button class="tab-btn" data-tab="camiones">🚛 Camiones</button>
+    <button class="tab-btn" data-tab="destinos">📍 Destinos</button>
+    <button class="tab-btn" data-tab="sistema">🔧 Sistema</button>
+  </div>
+  <div id="config-tab-content"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
+}
+function bindConfig() {
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderConfigTab(btn.dataset.tab);
+    });
+  });
+}
+async function loadConfig() {
+  const r = await api('repartidores.php');
+  const destR = await api('config_api.php','POST',{action:'listar_destinos'});
+  if (r.success) {
+    state.repartidores=r.repartidores; state.camiones=r.camiones;
+    state.destinos = (destR.success && destR.destinos) ? destR.destinos : [];
+    renderConfigTab('repartidores');
+  }
+}
+function renderConfigTab(tab) {
+  const el = document.getElementById('config-tab-content');
+  if (!el) return;
+  if (tab==='repartidores') {
+    el.innerHTML=`
+    <div class="flex gap-3 mb-4" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <h2 style="font-size:18px;font-weight:700">Repartidores</h2>
+      <button class="btn btn-primary btn-sm" id="nuevo-rep-btn">+ Nuevo repartidor</button>
+    </div>
+    <div id="nuevo-rep-form" style="display:none" class="card mb-4">
+      <h3 class="mb-4" style="font-size:15px">Nuevo repartidor</h3>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Nombre completo</label><input type="text" id="nr-nombre" placeholder="Juan Pérez" /></div>
+        <div class="form-group"><label>Email</label><input type="email" id="nr-email" placeholder="juan@tresreyes.com" /></div>
+      </div>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Contraseña</label><input type="password" id="nr-pass" placeholder="••••••" /></div>
+      </div>
+      <p class="text-sm text-muted mb-4">El camión no se asigna acá: se elige cada vez que se confirma un viaje, en "Viajes pendientes".</p>
+      <div class="flex gap-2">
+        <button class="btn btn-primary" id="guardar-rep-btn">Guardar</button>
+        <button class="btn btn-secondary" id="cancelar-rep-btn">Cancelar</button>
+      </div>
+    </div>
+    <div style="display:grid;gap:12px" id="reps-lista">
+      ${state.repartidores.map(r=>`
+      <div class="card" id="rep-card-${r.id}">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="width:44px;height:44px;border-radius:50%;background:var(--verde);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700">${(r.nombre||'?')[0]}</div>
+          <div style="flex:1">
+            <div style="font-weight:700">${r.nombre}</div>
+            <div class="text-sm text-muted">${r.email || '@'+r.usuario}</div>
+            <div class="text-sm mt-2">🚛 ${r.patente?`${r.patente} — ${r.marca||''} ${r.modelo||''}`:'<span class="text-muted">Sin camión</span>'}</div>
+          </div>
+          <span class="tag ${r.viajes_activos>0?'tag-azul':'tag-verde'}">${r.viajes_activos>0?'🔵 En viaje':'✅ Disponible'}</span>
+          <button class="btn btn-secondary btn-sm" data-edit-rep="${r.id}">✏️ Editar</button>
+          <button class="btn btn-danger btn-sm" data-del-rep="${r.id}">🗑 Eliminar</button>
+        </div>
+        <div id="edit-rep-form-${r.id}" style="display:none;margin-top:16px;border-top:1px solid #2E2E2E;padding-top:16px">
+          <div class="form-row mb-4">
+            <div class="form-group"><label>Nombre completo</label><input type="text" id="er-nombre-${r.id}" value="${r.nombre||''}" /></div>
+            <div class="form-group"><label>Email</label><input type="email" id="er-email-${r.id}" value="${r.email||''}" /></div>
+          </div>
+          <div class="form-row mb-4">
+            <div class="form-group"><label>Nueva contraseña (opcional)</label><input type="password" id="er-pass-${r.id}" placeholder="Dejar vacío para no cambiar" /></div>
+            <div class="form-group"><label>Camión asignado</label>
+              <select id="er-camion-${r.id}"><option value="">Sin asignar</option>
+              ${state.camiones.map(c=>`<option value="${c.id}" ${String(c.id)===String(r.camion_id)?'selected':''}>${c.patente} — ${c.marca||''} ${c.modelo||''}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-primary btn-sm" data-guardar-edit-rep="${r.id}">Guardar cambios</button>
+            <button class="btn btn-secondary btn-sm" data-cancelar-edit-rep="${r.id}">Cancelar</button>
+          </div>
+        </div>
+      </div>`).join('')||'<div class="card"><p class="text-muted">No hay repartidores.</p></div>'}
+    </div>`;
+    document.getElementById('nuevo-rep-btn')?.addEventListener('click',()=>document.getElementById('nuevo-rep-form').style.display='block');
+    document.getElementById('cancelar-rep-btn')?.addEventListener('click',()=>document.getElementById('nuevo-rep-form').style.display='none');
+    document.getElementById('guardar-rep-btn')?.addEventListener('click',guardarNuevoRep);
+    document.querySelectorAll('[data-edit-rep]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const f=document.getElementById(`edit-rep-form-${btn.dataset.editRep}`);
+        if(f) f.style.display = f.style.display==='none' ? 'block' : 'none';
+      });
+    });
+    document.querySelectorAll('[data-cancelar-edit-rep]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const f=document.getElementById(`edit-rep-form-${btn.dataset.cancelarEditRep}`);
+        if(f) f.style.display='none';
+      });
+    });
+    document.querySelectorAll('[data-guardar-edit-rep]').forEach(btn=>{
+      btn.addEventListener('click',()=>guardarEditRep(btn.dataset.guardarEditRep));
+    });
+    document.querySelectorAll('[data-del-rep]').forEach(btn=>{
+      btn.addEventListener('click',()=>eliminarRepartidor(btn.dataset.delRep));
+    });
+  }
+  if (tab==='camiones') {
+    el.innerHTML=`
+    <div class="flex gap-3 mb-4" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <h2 style="font-size:18px;font-weight:700">Camiones</h2>
+      <button class="btn btn-primary btn-sm" id="nuevo-cam-btn">+ Nuevo camión</button>
+    </div>
+    <div id="nuevo-cam-form" style="display:none" class="card mb-4">
+      <h3 class="mb-4" style="font-size:15px">Nuevo camión</h3>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Patente</label><input type="text" id="nc-patente" placeholder="AB123CD" /></div>
+        <div class="form-group"><label>Marca</label><input type="text" id="nc-marca" placeholder="Mercedes-Benz" /></div>
+      </div>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Modelo</label><input type="text" id="nc-modelo" placeholder="Accelo 815" /></div>
+        <div class="form-group"><label>Capacidad (kg)</label><input type="number" id="nc-capacidad" placeholder="3500" /></div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-primary" id="guardar-cam-btn">Guardar</button>
+        <button class="btn btn-secondary" id="cancelar-cam-btn">Cancelar</button>
+      </div>
+    </div>
+    <div style="display:grid;gap:12px">${state.camiones.map(c=>`
+    <div class="card" id="cam-card-${c.id}">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="font-size:32px">🚛</div>
+        <div style="flex:1">
+          <div style="font-weight:700">${c.patente}</div>
+          <div class="text-sm text-muted">${c.marca||''} ${c.modelo||''}</div>
+          <div class="text-sm mt-2">⚖️ ${c.capacidad_kg} kg</div>
+        </div>
+        <span class="tag ${c.estado==='en_viaje'?'tag-azul':c.estado==='mantenimiento'?'tag-amarillo':'tag-verde'}">${c.estado==='en_viaje'?'🔵 En viaje':c.estado==='mantenimiento'?'⚠️ Mantenimiento':'✅ Disponible'}</span>
+        <select onchange="cambiarEstadoCamion(${c.id},this.value)" style="width:160px">
+          <option value="disponible" ${c.estado==='disponible'?'selected':''}>✅ Disponible</option>
+          <option value="en_viaje" ${c.estado==='en_viaje'?'selected':''}>🔵 En viaje</option>
+          <option value="mantenimiento" ${c.estado==='mantenimiento'?'selected':''}>⚠️ Mantenimiento</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" data-edit-cam="${c.id}">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" data-del-cam="${c.id}">🗑 Eliminar</button>
+      </div>
+      <div id="edit-cam-form-${c.id}" style="display:none;margin-top:16px;border-top:1px solid #2E2E2E;padding-top:16px">
+        <div class="form-row mb-4">
+          <div class="form-group"><label>Patente</label><input type="text" id="ec-patente-${c.id}" value="${c.patente||''}" /></div>
+          <div class="form-group"><label>Marca</label><input type="text" id="ec-marca-${c.id}" value="${c.marca||''}" /></div>
+        </div>
+        <div class="form-row mb-4">
+          <div class="form-group"><label>Modelo</label><input type="text" id="ec-modelo-${c.id}" value="${c.modelo||''}" /></div>
+          <div class="form-group"><label>Capacidad (kg)</label><input type="number" id="ec-capacidad-${c.id}" value="${c.capacidad_kg||''}" /></div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-primary btn-sm" data-guardar-edit-cam="${c.id}">Guardar cambios</button>
+          <button class="btn btn-secondary btn-sm" data-cancelar-edit-cam="${c.id}">Cancelar</button>
+        </div>
+      </div>
+    </div>`).join('')||'<div class="card"><p class="text-muted">No hay camiones.</p></div>'}</div>`;
+    document.getElementById('nuevo-cam-btn')?.addEventListener('click',()=>document.getElementById('nuevo-cam-form').style.display='block');
+    document.getElementById('cancelar-cam-btn')?.addEventListener('click',()=>document.getElementById('nuevo-cam-form').style.display='none');
+    document.getElementById('guardar-cam-btn')?.addEventListener('click',guardarNuevoCamion);
+    document.querySelectorAll('[data-edit-cam]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const f=document.getElementById(`edit-cam-form-${btn.dataset.editCam}`);
+        if(f) f.style.display = f.style.display==='none' ? 'block' : 'none';
+      });
+    });
+    document.querySelectorAll('[data-cancelar-edit-cam]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const f=document.getElementById(`edit-cam-form-${btn.dataset.cancelarEditCam}`);
+        if(f) f.style.display='none';
+      });
+    });
+    document.querySelectorAll('[data-guardar-edit-cam]').forEach(btn=>{
+      btn.addEventListener('click',()=>guardarEditCamion(btn.dataset.guardarEditCam));
+    });
+    document.querySelectorAll('[data-del-cam]').forEach(btn=>{
+      btn.addEventListener('click',()=>eliminarCamion(btn.dataset.delCam));
+    });
+  }
+  if (tab==='destinos') {
+    el.innerHTML=`
+    <div class="flex gap-3 mb-4" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <h2 style="font-size:18px;font-weight:700">Puntos de finalización</h2>
+      <button class="btn btn-primary btn-sm" id="nuevo-dest-btn">+ Nuevo punto</button>
+    </div>
+    <p class="text-sm text-muted mb-4">Además de la cochera de siempre, acá podés cargar otros lugares donde a veces terminan los camiones. Las rutas siempre salen de la fábrica y terminan en el punto que elijas al confirmar cada viaje.</p>
+    <div id="nuevo-dest-form" style="display:none" class="card mb-4">
+      <h3 class="mb-4" style="font-size:15px">Nuevo punto de finalización</h3>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Nombre</label><input type="text" id="nd-nombre" placeholder="Depósito Norte" /></div>
+        <div class="form-group"><label>Calle</label><input type="text" id="nd-calle" placeholder="Av. Rivadavia" /></div>
+      </div>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Altura</label><input type="text" id="nd-altura" placeholder="4500" /></div>
+        <div class="form-group"><label>Localidad</label><input type="text" id="nd-localidad" placeholder="San Miguel" /></div>
+      </div>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Provincia</label><input type="text" id="nd-provincia" placeholder="Buenos Aires" /></div>
+        <div class="form-group"><label>Código postal (opcional)</label><input type="text" id="nd-cp" placeholder="B1663" /></div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-primary" id="guardar-dest-btn">Guardar</button>
+        <button class="btn btn-secondary" id="cancelar-dest-btn">Cancelar</button>
+      </div>
+    </div>
+    <div style="display:grid;gap:12px">${(state.destinos||[]).map(d=>`
+    <div class="card" id="dest-card-${d.id}">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="font-size:32px">📍</div>
+        <div style="flex:1">
+          <div style="font-weight:700">${d.nombre}</div>
+          <div class="text-sm text-muted">${d.calle} ${d.altura}, ${d.localidad}, ${d.provincia}${d.cp?' ('+d.cp+')':''}</div>
+        </div>
+        <span class="tag ${d.lat?'tag-verde':'tag-amarillo'}">${d.lat?'✓ Ubicado':'⚠️ Sin ubicar'}</span>
+        <button class="btn btn-secondary btn-sm" data-edit-dest="${d.id}">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" data-del-dest="${d.id}">🗑 Eliminar</button>
+      </div>
+      <div id="edit-dest-form-${d.id}" style="display:none;margin-top:16px;border-top:1px solid #2E2E2E;padding-top:16px">
+        <div class="form-row mb-4">
+          <div class="form-group"><label>Nombre</label><input type="text" id="ed-nombre-${d.id}" value="${d.nombre||''}" /></div>
+          <div class="form-group"><label>Calle</label><input type="text" id="ed-calle-${d.id}" value="${d.calle||''}" /></div>
+        </div>
+        <div class="form-row mb-4">
+          <div class="form-group"><label>Altura</label><input type="text" id="ed-altura-${d.id}" value="${d.altura||''}" /></div>
+          <div class="form-group"><label>Localidad</label><input type="text" id="ed-localidad-${d.id}" value="${d.localidad||''}" /></div>
+        </div>
+        <div class="form-row mb-4">
+          <div class="form-group"><label>Provincia</label><input type="text" id="ed-provincia-${d.id}" value="${d.provincia||''}" /></div>
+          <div class="form-group"><label>Código postal</label><input type="text" id="ed-cp-${d.id}" value="${d.cp||''}" /></div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-primary btn-sm" data-guardar-edit-dest="${d.id}">Guardar cambios</button>
+          <button class="btn btn-secondary btn-sm" data-cancelar-edit-dest="${d.id}">Cancelar</button>
+        </div>
+      </div>
+    </div>`).join('')||'<div class="card"><p class="text-muted">Todavía no cargaste ningún punto de finalización — las rutas van a terminar en la cochera de siempre.</p></div>'}</div>`;
+
+    document.getElementById('nuevo-dest-btn')?.addEventListener('click',()=>document.getElementById('nuevo-dest-form').style.display='block');
+    document.getElementById('cancelar-dest-btn')?.addEventListener('click',()=>document.getElementById('nuevo-dest-form').style.display='none');
+    document.getElementById('guardar-dest-btn')?.addEventListener('click', guardarNuevoDestino);
+    document.querySelectorAll('[data-edit-dest]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const f=document.getElementById(`edit-dest-form-${btn.dataset.editDest}`);
+        if(f) f.style.display = f.style.display==='none' ? 'block' : 'none';
+      });
+    });
+    document.querySelectorAll('[data-cancelar-edit-dest]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const f=document.getElementById(`edit-dest-form-${btn.dataset.cancelarEditDest}`);
+        if(f) f.style.display='none';
+      });
+    });
+    document.querySelectorAll('[data-guardar-edit-dest]').forEach(btn=>{
+      btn.addEventListener('click',()=>guardarEditDestino(btn.dataset.guardarEditDest));
+    });
+    document.querySelectorAll('[data-del-dest]').forEach(btn=>{
+      btn.addEventListener('click',()=>eliminarDestino(btn.dataset.delDest));
+    });
+  }
+  if (tab==='sistema') {
+    const conf=JSON.parse(localStorage.getItem('tr_config')||'{}');
+    el.innerHTML=`<div style="display:grid;gap:16px;max-width:600px">
+    <div class="card"><h3 style="font-size:15px;font-weight:700;margin-bottom:16px">🏭 Punto de partida</h3>
+      <div class="form-group mb-4"><label>Dirección de la fábrica</label><input type="text" id="conf-fabrica" value="${conf.fabrica||'Martin de Irigoyen 1217, San Miguel, Buenos Aires'}" /></div>
+      <button class="btn btn-primary btn-sm" id="guardar-fabrica">Guardar</button></div>
+    <div class="card"><h3 style="font-size:15px;font-weight:700;margin-bottom:16px">🎨 Apariencia</h3>
+      <div class="form-group mb-4"><label>Nombre de la empresa</label><input type="text" id="conf-empresa" value="${conf.empresa||'Tres Reyes'}" /></div>
+      <button class="btn btn-primary btn-sm" id="guardar-apariencia">Guardar</button></div>
+    </div>`;
+    document.getElementById('guardar-fabrica')?.addEventListener('click',()=>saveConf('fabrica',document.getElementById('conf-fabrica').value));
+    document.getElementById('guardar-apariencia')?.addEventListener('click',()=>{
+      saveConf('empresa',document.getElementById('conf-empresa').value);
+      const logo=document.querySelector('.sidebar-logo h2');
+      if(logo)logo.textContent=document.getElementById('conf-empresa').value;
+    });
+  }
+}
+function saveConf(key,value){const conf=JSON.parse(localStorage.getItem('tr_config')||'{}');conf[key]=value;localStorage.setItem('tr_config',JSON.stringify(conf));toast(`✅ Guardado`);}
+async function guardarNuevoRep(){
+  const nombre=document.getElementById('nr-nombre').value.trim();
+  const email=document.getElementById('nr-email').value.trim();
+  const pass=document.getElementById('nr-pass').value;
+  if(!nombre||!email||!pass){toast('Completá nombre, email y contraseña','error');return;}
+  const r=await api('config_api.php','POST',{action:'nuevo_repartidor',nombre,email,password:pass});
+  if(r.success){toast('✅ Repartidor creado');document.getElementById('nuevo-rep-form').style.display='none';await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+async function cambiarEstadoCamion(id,estado){
+  const r=await api('config_api.php','POST',{action:'estado_camion',id,estado});
+  if(r.success){toast('✅ Estado actualizado');await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+async function guardarEditRep(id){
+  const nombre=document.getElementById(`er-nombre-${id}`).value.trim();
+  const email=document.getElementById(`er-email-${id}`).value.trim();
+  const password=document.getElementById(`er-pass-${id}`).value;
+  const camion=document.getElementById(`er-camion-${id}`).value;
+  const r=await api('config_api.php','POST',{action:'editar_repartidor',id,nombre,email,password,camion_id:camion||null});
+  if(r.success){toast('✅ Repartidor actualizado');await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+async function eliminarRepartidor(id){
+  if(!confirm('¿Eliminar este repartidor? Esta acción no se puede deshacer.')) return;
+  let r=await api('config_api.php','POST',{action:'eliminar_repartidor',id});
+  if(!r.success && r.requiere_confirmacion){
+    if(!confirm(r.message+'\n\n(El viaje no se cancela ni se pierde, solo se desvincula de este repartidor.)')) return;
+    r=await api('config_api.php','POST',{action:'eliminar_repartidor',id,forzar:true});
+  }
+  if(r.success){toast('✅ Repartidor eliminado');await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+async function guardarNuevoCamion(){
+  const patente=document.getElementById('nc-patente').value.trim();
+  const marca=document.getElementById('nc-marca').value.trim();
+  const modelo=document.getElementById('nc-modelo').value.trim();
+  const capacidad_kg=parseFloat(document.getElementById('nc-capacidad').value||0);
+  if(!patente||!capacidad_kg){toast('Completá al menos patente y capacidad','error');return;}
+  const r=await api('config_api.php','POST',{action:'nuevo_camion',patente,marca,modelo,capacidad_kg});
+  if(r.success){toast('✅ Camión agregado');document.getElementById('nuevo-cam-form').style.display='none';await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+async function guardarEditCamion(id){
+  const patente=document.getElementById(`ec-patente-${id}`).value.trim();
+  const marca=document.getElementById(`ec-marca-${id}`).value.trim();
+  const modelo=document.getElementById(`ec-modelo-${id}`).value.trim();
+  const capacidad_kg=parseFloat(document.getElementById(`ec-capacidad-${id}`).value||0);
+  if(!patente||!capacidad_kg){toast('Completá al menos patente y capacidad','error');return;}
+  const r=await api('config_api.php','POST',{action:'editar_camion',id,patente,marca,modelo,capacidad_kg});
+  if(r.success){toast('✅ Camión actualizado');await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+async function eliminarCamion(id){
+  if(!confirm('¿Eliminar este camión? Esta acción no se puede deshacer.')) return;
+  let r=await api('config_api.php','POST',{action:'eliminar_camion',id});
+  if(!r.success && r.requiere_confirmacion){
+    if(!confirm(r.message+'\n\n(El viaje no se cancela ni se pierde, solo se desvincula de este camión.)')) return;
+    r=await api('config_api.php','POST',{action:'eliminar_camion',id,forzar:true});
+  }
+  if(r.success){toast('✅ Camión eliminado');await loadConfig();}
+  else toast(r.message||'Error','error');
+}
+
+async function guardarNuevoDestino(){
+  const nombre=document.getElementById('nd-nombre').value.trim();
+  const calle=document.getElementById('nd-calle').value.trim();
+  const altura=document.getElementById('nd-altura').value.trim();
+  const localidad=document.getElementById('nd-localidad').value.trim();
+  const provincia=document.getElementById('nd-provincia').value.trim();
+  const cp=document.getElementById('nd-cp').value.trim();
+  if(!nombre||!calle||!altura||!localidad||!provincia){toast('Completá nombre, calle, altura, localidad y provincia','error');return;}
+  const r=await api('config_api.php','POST',{action:'nuevo_destino',nombre,calle,altura,localidad,provincia,cp});
+  if(r.success){toast(r.message.includes('no se pudo')?('⚠️ '+r.message):('✅ '+r.message));document.getElementById('nuevo-dest-form').style.display='none';await loadConfig();renderConfigTab('destinos');}
+  else toast(r.message||'Error','error');
+}
+async function guardarEditDestino(id){
+  const nombre=document.getElementById(`ed-nombre-${id}`).value.trim();
+  const calle=document.getElementById(`ed-calle-${id}`).value.trim();
+  const altura=document.getElementById(`ed-altura-${id}`).value.trim();
+  const localidad=document.getElementById(`ed-localidad-${id}`).value.trim();
+  const provincia=document.getElementById(`ed-provincia-${id}`).value.trim();
+  const cp=document.getElementById(`ed-cp-${id}`).value.trim();
+  if(!nombre||!calle||!altura||!localidad||!provincia){toast('Completá todos los campos','error');return;}
+  const r=await api('config_api.php','POST',{action:'editar_destino',id,nombre,calle,altura,localidad,provincia,cp});
+  if(r.success){toast(r.message.includes('no se pudo')?('⚠️ '+r.message):('✅ '+r.message));await loadConfig();renderConfigTab('destinos');}
+  else toast(r.message||'Error','error');
+}
+async function eliminarDestino(id){
+  if(!confirm('¿Eliminar este punto de finalización? Los viajes que ya lo tenían elegido vuelven a terminar en la cochera.')) return;
+  const r=await api('config_api.php','POST',{action:'eliminar_destino',id});
+  if(r.success){toast('✅ '+r.message);await loadConfig();renderConfigTab('destinos');}
+  else toast(r.message||'Error','error');
+}
+
+
+// =============================================
+// REPARTIDOR
+// =============================================
+function renderRepartidor() {
+  if (state.repPage==='nav') return renderNav();
+  return `
+  <div class="rep-layout">
+    <div class="rep-header">
+      <div><h1>🚛 Tres Reyes</h1><div style="font-size:18px;opacity:.8">Hola, ${state.user.nombre}</div></div>
+      <div class="flex gap-2">
+        <button class="btn btn-secondary btn-sm" id="toggle-modo-rep-btn" title="Cambiar modo">${localStorage.getItem('tr_modo')==='claro'?'🌙':'☀️'}</button>
+        <button class="btn btn-secondary btn-sm" id="logout-btn-rep">Salir</button>
+      </div>
+    </div>
+    <div class="rep-content">
+      <div id="rep-viajes-list"><div class="loading"><div class="spinner"></div> Cargando viajes...</div></div>
+    </div>
+  </div>`;
+}
+
+async function bindRepartidor() {
+  document.getElementById('logout-btn-rep')?.addEventListener('click', logout);
+  document.getElementById('toggle-modo-rep-btn')?.addEventListener('click', toggleModo);
+  loadViajesRep();
+}
+
+async function loadViajesRep() {
+  const rid = state.user.repartidor_id;
+  if (!rid) {
+    document.getElementById('rep-viajes-list').innerHTML='<div class="card"><p class="text-muted">Tu usuario no tiene perfil de repartidor. Contactá al administrador.</p></div>';
+    return;
+  }
+  const r = await api(`viajes.php?repartidor_id=${rid}`);
+  if (!r.success) return;
+  state.viajesRep = r.viajes;
+
+  // RF09: si hay un viaje en curso (p.ej. tras recargar la página),
+  // retomar el envío de ubicación automáticamente.
+  const enCurso = state.viajesRep.find(v => v.estado === 'en_curso');
+  if (enCurso) iniciarSeguimientoUbicacion(enCurso);
+  else detenerSeguimientoUbicacion();
+
+  const el = document.getElementById('rep-viajes-list');
+  if (!el) return;
+
+  // Viaje en curso / listo para salir, separado del historial ya finalizado.
+  const activos     = state.viajesRep.filter(v => v.estado === 'confirmado' || v.estado === 'en_curso');
+  const finalizados = state.viajesRep.filter(v => v.estado === 'finalizado');
+
+  if (!activos.length && !finalizados.length) { el.innerHTML='<div class="card"><p class="text-muted">No tenés viajes asignados.</p></div>'; return; }
+
+  const estadoColor={confirmado:'var(--amarillo)',en_curso:'var(--azul)',finalizado:'var(--verde)'};
+  const tarjetaViaje = (v, i) => `
+  <div class="viaje-rep-card">
+    <div class="viaje-rep-header">
+      <div><div style="font-weight:700">🚛 ${v.patente||'Camión'} · ${v.zona?('Zona '+v.zona):''}</div>
+      <div class="text-sm text-muted">${(v.boletas||[]).length} paradas · ${v.peso_total} kg</div></div>
+      <span class="tag" style="background:${estadoColor[v.estado]||'#333'};color:#fff">${v.estado==='confirmado'?'Listo para salir':v.estado==='en_curso'?'En curso':v.estado==='finalizado'?'Finalizado':'—'}</span>
+    </div>
+    ${(v.boletas||[]).map((b,j)=>`
+    <div class="parada-rep ${b.estado==='entregada'?'entregada':''}" id="parada-${b.id}">
+      <button class="check-btn ${b.estado==='entregada'?'done':''}" data-bid="${b.id}">${b.estado==='entregada'?'✓':''}</button>
+      <div class="parada-info">
+        <div class="parada-cliente">${j+1}. ${b.cliente}</div>
+        <div class="parada-dir">${b.direccion} ${!(b.lat&&b.lon)?'<span class="tag tag-amarillo" style="font-size:11px">⚠️ Sin ubicación — no aparece en el mapa</span>':''}</div>
+        <div class="parada-peso">${b.peso_kg} kg ${b.estado==='entregada'&&b.entregada_at?`<span class="text-muted">· ✓ ${formatTime(b.entregada_at)}</span>`:''}</div>
+      </div>
+    </div>`).join('')}
+    <div style="padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap">
+      ${v.estado==='confirmado'?`<button class="btn btn-primary" data-init="${v.id}">▶ Iniciar viaje</button>`:''}
+      ${v.estado==='en_curso'?`
+        <button class="btn btn-primary btn-sm" data-gmaps="${v.id}">🗺️ Abrir ruta en Google Maps</button>
+        <button class="btn btn-danger btn-sm" data-fin="${v.id}">✓ Finalizar</button>`:''}
+    </div>
+  </div>`;
+
+  el.innerHTML = `
+    <h2 style="font-size:16px;margin-bottom:10px">🚛 Viaje en curso</h2>
+    ${activos.length ? activos.map(tarjetaViaje).join('') : '<div class="card mb-4"><p class="text-muted">No tenés ningún viaje activo ahora mismo.</p></div>'}
+    <h2 style="font-size:16px;margin:20px 0 10px">🗂️ Historial de viajes</h2>
+    ${finalizados.length ? `<div style="display:grid;gap:10px">${finalizados.map(v => `
+      <div class="card">
+        <div style="font-weight:700">🚛 ${v.patente||'Camión'} · ${v.zona?('Zona '+v.zona):''}</div>
+        <div class="text-sm text-muted mt-2">
+          ${(v.boletas||[]).length} paradas · ${v.peso_total} kg
+          ${v.started_at?` · ▶ ${formatTime(v.started_at)}`:''}
+          ${v.finished_at?` · ✓ ${formatTime(v.finished_at)}`:''}
+        </div>
+      </div>`).join('')}</div>` : '<div class="card"><p class="text-muted">Todavía no finalizaste ningún viaje (se muestran los de las últimas 48 hs).</p></div>'}
+  `;
+  document.querySelectorAll('.check-btn').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      await api('viajes.php','POST',{action:'entregar_parada',boleta_id:parseInt(btn.dataset.bid)});
+      btn.classList.add('done');btn.textContent='✓';btn.closest('.parada-rep').classList.add('entregada');
+      // Mostrar la hora de entrega al toque, sin recargar
+      const pesoEl = btn.closest('.parada-rep').querySelector('.parada-peso');
+      if (pesoEl && !pesoEl.querySelector('.hora-entrega')) {
+        const ahora = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+        pesoEl.insertAdjacentHTML('beforeend', ` <span class="text-muted hora-entrega">· ✓ ${ahora}</span>`);
+      }
+    });
+  });
+  document.querySelectorAll('[data-init]').forEach(btn=>btn.addEventListener('click',()=>iniciarViaje(parseInt(btn.dataset.init))));
+  document.querySelectorAll('[data-gmaps]').forEach(btn=>btn.addEventListener('click',()=>{const v=state.viajesRep.find(x=>x.id===parseInt(btn.dataset.gmaps));if(v)abrirGoogleMaps(v);}));
+  document.querySelectorAll('[data-fin]').forEach(btn=>btn.addEventListener('click',()=>finalizarViaje(parseInt(btn.dataset.fin))));
+}
+
+async function abrirGoogleMaps(viaje, ventanaPrevia) {
+  const todas = viaje.boletas || [];
+  // Solo las que faltan entregar van a Maps — si ya se entregó una
+  // parada (por ejemplo, al reabrir la ruta a mitad de camino, o
+  // después de sumar una parada nueva a un viaje en curso), no tiene
+  // sentido volver a pasar por ahí.
+  const paradas = todas.filter(b => b.lat && b.lon && b.estado !== 'entregada');
+  const sinUbicar = todas.filter(b => !(b.lat && b.lon) && b.estado !== 'entregada');
+  if (!paradas.length) {
+    if (ventanaPrevia) ventanaPrevia.close();
+    toast('Sin coordenadas para navegar', 'error');
+    return;
+  }
+
+  // Pestaña de Maps: si no nos pasaron una ya abierta (ver iniciarViaje),
+  // la abrimos ACÁ, como lo primero que hace la función, antes de
+  // cualquier espera (el GPS es asíncrono) — así queda ligada al toque
+  // del usuario y Safari no la bloquea. Queda en blanco hasta el final,
+  // cuando ya sabemos la URL real. Así tu página no se reemplaza: queda
+  // en su propia pestaña, y para volver alcanza con cambiar de pestaña
+  // en vez de tocar "atrás" adentro de Maps.
+  const ventana = ventanaPrevia !== undefined ? ventanaPrevia : window.open('', '_blank');
+
+  // Avisar si hay paradas sin geolocalizar: quedan afuera del mapa, pero
+  // igual hay que entregarlas — el repartidor las ve en la lista de abajo.
+  if (sinUbicar.length) {
+    toast(`⚠️ ${sinUbicar.length} parada${sinUbicar.length>1?'s':''} sin ubicación no ${sinUbicar.length>1?'aparecen':'aparece'} en el mapa: ${sinUbicar.map(b=>b.cliente).join(', ')}. Están igual en la lista de abajo.`, 'error');
+  }
+
+  // Formato oficial de Google Maps Directions (api=1). Las coordenadas se
+  // normalizan a 6 decimales y sin espacios (más decimales rompen el
+  // parámetro waypoints y Google devuelve "No se encuentra ese lugar").
+  const fmt = (lat, lon) => `${parseFloat(lat).toFixed(6)},${parseFloat(lon).toFixed(6)}`;
+
+  // Origen: la ubicación REAL del repartidor en este momento (se pide
+  // justo acá, rápido). Es el único origen con el que Google Maps deja
+  // tocar "Iniciar" y navegar de verdad — con un origen fijo (la
+  // fábrica) se puede VER la ruta pero no arrancarla, porque no estás
+  // parado ahí. Si el GPS falla, se usa la fábrica como respaldo (al
+  // menos deja ver la ruta, aunque no se pueda iniciar desde ese punto).
+  // OJO: esto NO afecta el orden de las paradas, que ya se calculó al
+  // confirmar el viaje usando la fábrica — acá solo se usa para el
+  // origen del link.
+  const pos = await new Promise(resolve => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      err => {
+        console.warn('[TR] No se pudo obtener ubicación para el link:', err.code, err.message);
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  });
+
+  const origen = pos ? fmt(pos.lat, pos.lon) : fmt(FABRICA.lat, FABRICA.lon);
+
+  // Destino: el punto de finalización que eligió el admin para este
+  // viaje, si eligió uno. Si no, el destino es la ÚLTIMA entrega de la
+  // ruta ya optimizada (no hay ningún punto por defecto) — el resto de
+  // las paradas van como waypoints intermedios.
+  let destinoParadas, intermediasParadas;
+  if (viaje.destino_lat && viaje.destino_lon) {
+    destinoParadas = fmt(viaje.destino_lat, viaje.destino_lon);
+    intermediasParadas = paradas;
+  } else {
+    const ultima = paradas[paradas.length - 1];
+    destinoParadas = fmt(ultima.lat, ultima.lon);
+    intermediasParadas = paradas.slice(0, -1);
+  }
+  const destino = destinoParadas;
+
+  // Sacar duplicados CONSECUTIVOS (dos o más paradas seguidas con la
+  // misma coordenada exacta, ej. varias boletas de la misma dirección —
+  // puede pasar con 2, 3 o más facturas repetidas). Google Maps no logra
+  // calcular un tramo de distancia cero entre paradas idénticas seguidas,
+  // y en vez de mostrar la ruta se queda en la pantalla de búsqueda sin
+  // vista previa. Para el LINK se unifican en un solo punto (es la misma
+  // parada física); en la lista de entregas de la app el repartidor las
+  // sigue viendo separadas igual, cada una con su propio check.
+  const paradasSinDupConsecutivos = [];
+  let prevKey = null;
+  for (const p of intermediasParadas) {
+    const key = fmt(p.lat, p.lon);
+    if (key !== prevKey) paradasSinDupConsecutivos.push(p);
+    prevKey = key;
+  }
+  const intermedias = paradasSinDupConsecutivos.map(p => fmt(p.lat, p.lon)).join('|');
+
+  let urlWeb = `https://www.google.com/maps/dir/?api=1`
+    + `&origin=${encodeURIComponent(origen)}`
+    + `&destination=${encodeURIComponent(destino)}`
+    + `&travelmode=driving`;
+  if (intermedias) urlWeb += `&waypoints=${encodeURIComponent(intermedias)}`;
+
+  console.log('[TR Maps] URL generada:', urlWeb);
+
+  // Llevar a la pestaña ya abierta a la ruta real. Si por algún motivo
+  // no se pudo abrir esa pestaña (bloqueada igual, o poco frecuente),
+  // como respaldo navegamos la pestaña actual para no dejarte sin nada.
+  if (ventana) ventana.location.href = urlWeb;
+  else window.location.href = urlWeb;
+}
+
+async function iniciarViaje(viaje_id) {
+  const v=state.viajesRep.find(x=>x.id===viaje_id);
+  if(!v)return;
+
+  // Abrir la pestaña de Maps YA, en el mismo instante del toque —antes
+  // de llamar al servidor y de pedir el GPS, que son cosas asíncronas—
+  // para que quede ligada al toque del usuario y Safari no la bloquee
+  // después. Se completa (le decimos a dónde ir) recién al final, en
+  // abrirGoogleMaps. Así queda en SU PROPIA pestaña: para volver a
+  // marcar una entrega alcanza con cambiar de pestaña, no hay que tocar
+  // "atrás" adentro de Maps.
+  const ventanaMaps = window.open('', '_blank');
+
+  const payload = { action:'iniciar', viaje_id, repartidor_id:state.user.repartidor_id, camion_id:v.camion_id||state.user.camion_id };
+
+  const r=await api('viajes.php','POST',payload);
+  if(r.success){
+    toast('▶ Viaje iniciado');
+    await loadViajesRep();
+    const updated = state.viajesRep.find(x=>x.id===viaje_id);
+    if(updated) {
+      // Empezar a mandar ubicación al servidor apenas arranca el viaje
+      // (para el tracking en vivo del admin).
+      iniciarSeguimientoUbicacion(updated);
+      // Si el servidor devolvió las boletas ya reordenadas, usamos ese
+      // orden para el link.
+      if (r.boletas && r.boletas.length) updated.boletas = r.boletas;
+      // Completar la pestaña ya abierta con la ruta real.
+      abrirGoogleMaps(updated, ventanaMaps);
+    } else if (ventanaMaps) {
+      ventanaMaps.close();
+    }
+  } else {
+    if (ventanaMaps) ventanaMaps.close();
+    toast(r.message,'error');
+  }
+}
+
+async function finalizarViaje(viaje_id) {
+  if(!confirm('¿Confirmás que terminaste el viaje?'))return;
+  const r=await api('viajes.php','POST',{action:'finalizar',viaje_id});
+  if(r.success){toast('✅ Viaje finalizado.');detenerSeguimientoUbicacion();cerrarNavegacion();await loadViajesRep();}
+  else toast(r.message,'error');
+}
+
+// =============================================
+// NAVEGACIÓN GPS
+// =============================================
+let navMapObj=null,navRoutingCtrl=null,navParadaActual=0,navViaje=null,userMarker=null,watchId=null;
+let navInstructions=[],navInstrIdx=0;
+
+function getArrow(type) {
+  const a={'TurnRight':'↱','TurnLeft':'↰','SharpRight':'↪','SharpLeft':'↩','SlightRight':'↗','SlightLeft':'↖','Straight':'↑','Continue':'↑','Roundabout':'↻','DestinationReached':'📍','WaypointReached':'📍','Head':'↑','Depart':'🏭','Arrive':'📍'};
+  return a[type]||'↑';
+}
+
+function renderNav() {
+  navMapObj=null;navRoutingCtrl=null;userMarker=null;navInstructions=[];navInstrIdx=0;
+  return `
+  <div id="nav-screen" class="active">
+    <div id="nav-instruction">
+      <div id="nav-arrow-box">↑</div>
+      <div id="nav-instruction-text">
+        <div id="nav-distance-next">Calculando...</div>
+        <div id="nav-turn-text">Obteniendo ruta</div>
+        <div id="nav-street-name"></div>
+      </div>
+      <button onclick="cerrarNavegacion()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:18px">✕</button>
+    </div>
+    <div id="nav-subbar">
+      <span id="nav-progress">Parada 1/1</span>
+      <span id="nav-gps-status">📡 Buscando GPS...</span>
+      <span id="nav-eta"></span>
+    </div>
+    <div id="nav-map"></div>
+    <div id="nav-footer">
+      <div id="nav-stop-info">
+        <div id="nav-stop-name">Cargando...</div>
+        <div id="nav-stop-addr"></div>
+        <div id="nav-stop-meta"></div>
+      </div>
+      <div id="nav-btns">
+        <button class="btn btn-secondary btn-sm" id="nav-prev" style="flex:1">← Anterior</button>
+        <button class="btn btn-primary" id="nav-next" style="flex:2">Siguiente →</button>
+        <button class="btn btn-danger btn-sm" id="nav-fin">✓ Finalizar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function abrirNavegacion(viaje){navViaje=viaje;navParadaActual=0;state.repPage='nav';render();setTimeout(()=>initNavMap(),300);}
+
+function cerrarNavegacion(){
+  detenerGPS();state.repPage='viajes';
+  if(navMapObj){try{navMapObj.remove();}catch(e){}navMapObj=null;}
+  render();bindRepartidor();
+}
+
+function initNavMap(){
+  const todas=(navViaje?.boletas||[]);
+  const paradas=todas.filter(b=>b.lat&&b.lon);
+  const sinUbicar=todas.filter(b=>!(b.lat&&b.lon)&&b.estado!=='entregada');
+  if(!paradas.length){cerrarNavegacion();return;}
+  if(sinUbicar.length){
+    toast(`⚠️ ${sinUbicar.length} parada${sinUbicar.length>1?'s':''} sin ubicación no ${sinUbicar.length>1?'aparecen':'aparece'} en el mapa: ${sinUbicar.map(b=>b.cliente).join(', ')}. Están igual en la lista de abajo.`, 'error');
+  }
+  if(navMapObj){try{navMapObj.remove();}catch(e){}navMapObj=null;}
+  navRoutingCtrl=null;userMarker=null;
+  navMapObj=L.map('nav-map').setView([FABRICA.lat,FABRICA.lon],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(navMapObj);
+  const fabIcon=L.divIcon({html:`<div style="background:#E53E3E;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid #fff">🏭</div>`,className:'',iconSize:[32,32],iconAnchor:[16,16]});
+  L.marker([FABRICA.lat,FABRICA.lon],{icon:fabIcon}).addTo(navMapObj).bindPopup(`<strong>Punto de partida</strong><br>${FABRICA.direccion}`).openPopup();
+  paradas.forEach((p,i)=>{
+    const icon=L.divIcon({html:`<div style="background:#3B82F6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;border:2px solid #fff">${i+1}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    L.marker([parseFloat(p.lat),parseFloat(p.lon)],{icon}).addTo(navMapObj).bindPopup(`<strong>${i+1}. ${p.cliente}</strong><br>${p.direccion}`);
+  });
+  updateNavDisplay();bindNavButtons();trazarRutaNav(paradas);iniciarGPS();
+}
+
+function trazarRutaNav(paradas,origenOverride=null){
+  if(!paradas.length)return;
+  let origen=origenOverride?L.latLng(origenOverride.lat,origenOverride.lon):state.userPosition?L.latLng(state.userPosition.lat,state.userPosition.lon):L.latLng(FABRICA.lat,FABRICA.lon);
+  const wp=[origen,...paradas.slice(navParadaActual).map(p=>L.latLng(parseFloat(p.lat),parseFloat(p.lon)))];
+  if(navRoutingCtrl){try{navRoutingCtrl.remove();}catch(e){}navRoutingCtrl=null;}
+  if(wp.length<2)return;
+  navRoutingCtrl=L.Routing.control({waypoints:wp,router:L.Routing.osrmv1({serviceUrl:'https://router.project-osrm.org/route/v1',language:'es'}),lineOptions:{styles:[{color:'#1a73e8',weight:6,opacity:.9}]},createMarker:()=>null,addWaypoints:false,draggableWaypoints:false,fitSelectedRoutes:true,show:false}).addTo(navMapObj);
+  navRoutingCtrl.on('routesfound',function(e){
+    const route=e.routes[0];navInstructions=route.instructions||[];navInstrIdx=0;updateInstructionDisplay();
+    const mins=Math.round(route.summary.totalTime/60),km=(route.summary.totalDistance/1000).toFixed(1);
+    const eta=document.getElementById('nav-eta');if(eta)eta.textContent=`${km}km · ~${mins}min`;
+  });
+}
+
+function iniciarGPS(){
+  if(!navigator.geolocation)return;
+  const iconGPS=L.divIcon({html:`<div style="background:#F5C518;border-radius:50%;width:20px;height:20px;border:3px solid #fff;box-shadow:0 0 0 3px rgba(245,197,24,.4)"></div>`,className:'',iconSize:[20,20],iconAnchor:[10,10]});
+  let gpsInit=false,lastPos=null;
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    const{latitude:lat,longitude:lon,accuracy}=pos.coords;state.userPosition={lat,lon};
+    const gpsEl=document.getElementById('nav-gps-status');
+    if(accuracy>300){if(gpsEl)gpsEl.innerHTML=`⚠️ GPS impreciso (±${Math.round(accuracy)}m)`;return;}
+    if(gpsEl)gpsEl.innerHTML=`📍 GPS activo (±${Math.round(accuracy)}m)`;
+    if(!userMarker){userMarker=L.marker([lat,lon],{icon:iconGPS,zIndexOffset:1000}).addTo(navMapObj);}else userMarker.setLatLng([lat,lon]);
+    if(!gpsInit){gpsInit=true;navMapObj.setView([lat,lon],14);const p=(navViaje?.boletas||[]).filter(b=>b.lat&&b.lon);if(p.length)trazarRutaNav(p,{lat,lon});lastPos={lat,lon};return;}
+    if(lastPos&&haversineJS(lat,lon,lastPos.lat,lastPos.lon)<0.08)return;
+    lastPos={lat,lon};const p=(navViaje?.boletas||[]).filter(b=>b.lat&&b.lon);if(p.length)trazarRutaNav(p,{lat,lon});
+    advanceInstruction(lat,lon);
+
+    // El envío al servidor y la detección de desvío ahora los maneja
+    // iniciarSeguimientoUbicacion() en segundo plano (ver RF09 arriba),
+    // así funciona también cuando se navega con Google Maps.
+    // Acá solo actualizamos el texto de estado del GPS en pantalla:
+    if (navViaje?.boletas) {
+      const paradas = navViaje.boletas.filter(b=>b.lat&&b.lon);
+      if (paradas.length > 0) {
+        const minDist = Math.min(...paradas.map(p=>haversineJS(lat,lon,parseFloat(p.lat),parseFloat(p.lon))));
+        if (minDist > 0.5) {
+          const gpsEl = document.getElementById('nav-gps-status');
+          if (gpsEl) gpsEl.innerHTML = `⚠️ Desvío detectado (${(minDist*1000).toFixed(0)}m de la ruta)`;
+        }
+      }
+    }
+  },err=>{const el=document.getElementById('nav-gps-status');if(el)el.innerHTML='❌ GPS no disponible';},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+}
+
+function detenerGPS(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}userMarker=null;}
+
+// =============================================
+// RF09: Seguimiento de ubicación en segundo plano
+// Se activa al iniciar el viaje, sin importar si el
+// repartidor usa la navegación interna o Google Maps.
+// =============================================
+let bgWatchId=null, bgViaje=null, bgLastPos=null, bgLastSentTs=0;
+
+function iniciarSeguimientoUbicacion(viaje){
+  if(!navigator.geolocation || !viaje?.id) return;
+  if(bgWatchId!==null && bgViaje?.id===viaje.id) return; // ya se está siguiendo este viaje
+  detenerSeguimientoUbicacion();
+  bgViaje=viaje; bgLastPos=null; bgLastSentTs=0;
+  bgWatchId=navigator.geolocation.watchPosition(pos=>{
+    const{latitude:lat,longitude:lon,accuracy}=pos.coords;
+    state.userPosition={lat,lon};
+    if(accuracy>300)return; // GPS muy impreciso, no enviar
+
+    const now=Date.now();
+    const movioSuficiente=!bgLastPos||haversineJS(lat,lon,bgLastPos.lat,bgLastPos.lon)>0.03; // 30m
+    const pasoTiempo=now-bgLastSentTs>15000; // 15s
+    if(!movioSuficiente && !pasoTiempo)return;
+    bgLastPos={lat,lon}; bgLastSentTs=now;
+
+    if(state.user?.repartidor_id){
+      api('tracking.php','POST',{
+        action:'update', viaje_id:bgViaje.id,
+        repartidor_id:state.user.repartidor_id, lat, lon, accuracy
+      }).catch(()=>{});
+    }
+
+    // RF08: Detectar desvío de ruta (>500m del waypoint más cercano)
+    const paradas=(bgViaje?.boletas||[]).filter(b=>b.lat&&b.lon);
+    if(paradas.length>0){
+      const minDist=Math.min(...paradas.map(p=>haversineJS(lat,lon,parseFloat(p.lat),parseFloat(p.lon))));
+      if(minDist>0.5 && state.user?.repartidor_id){
+        api('tracking.php','POST',{
+          action:'desvio', viaje_id:bgViaje.id,
+          repartidor_id:state.user.repartidor_id,
+          mensaje:`${state.user.nombre} se desvió ${(minDist*1000).toFixed(0)}m de la ruta planificada`
+        }).catch(()=>{});
+      }
+    }
+  },()=>{/* error silencioso: seguimos intentando en el próximo fix */},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+}
+
+function detenerSeguimientoUbicacion(){
+  if(bgWatchId!==null){navigator.geolocation.clearWatch(bgWatchId);bgWatchId=null;}
+  bgViaje=null; bgLastPos=null; bgLastSentTs=0;
+}
+
+function updateNavDisplay(){
+  const paradas=(navViaje?.boletas||[]).filter(b=>b.lat&&b.lon);
+  const p=paradas[navParadaActual];if(!p)return;
+  const sn=document.getElementById('nav-stop-name'),sa=document.getElementById('nav-stop-addr'),sm=document.getElementById('nav-stop-meta'),pg=document.getElementById('nav-progress');
+  if(sn)sn.textContent=p.cliente;if(sa)sa.textContent=p.direccion;if(sm)sm.textContent=`⚖️ ${p.peso_kg} kg`;
+  if(pg)pg.textContent=`Parada ${navParadaActual+1} / ${paradas.length}`;
+  navMapObj?.setView([parseFloat(p.lat),parseFloat(p.lon)],16);
+  navInstructions=[];navInstrIdx=0;updateInstructionDisplay();
+}
+
+function updateInstructionDisplay(){
+  if(!navInstructions.length){const d=document.getElementById('nav-distance-next'),t=document.getElementById('nav-turn-text');if(d)d.textContent='Calculando...';if(t)t.textContent='Obteniendo ruta';return;}
+  const instr=navInstructions[navInstrIdx]||navInstructions[navInstructions.length-1];
+  const arrow=document.getElementById('nav-arrow-box'),distEl=document.getElementById('nav-distance-next'),turnEl=document.getElementById('nav-turn-text'),streetEl=document.getElementById('nav-street-name'),instrBox=document.getElementById('nav-instruction');
+  if(arrow)arrow.textContent=getArrow(instr.type);
+  if(distEl)distEl.textContent=instr.distance>1000?`${(instr.distance/1000).toFixed(1)} km`:`${Math.round(instr.distance)} m`;
+  if(turnEl)turnEl.textContent=instr.text||'Continuar';
+  if(streetEl&&navInstructions[navInstrIdx+1])streetEl.textContent='Luego: '+(navInstructions[navInstrIdx+1].text||'');
+  if(instrBox)instrBox.style.background=(instr.type==='DestinationReached'||instr.type==='WaypointReached'||instr.type==='Arrive')?'#1B7340':'#1a73e8';
+}
+
+function advanceInstruction(lat,lon){
+  if(!navInstructions.length||navInstrIdx>=navInstructions.length-1)return;
+  const instr=navInstructions[navInstrIdx];
+  if(instr.distance<30){navInstrIdx++;updateInstructionDisplay();}
+}
+
+function bindNavButtons(){
+  document.getElementById('nav-next')?.addEventListener('click',()=>{
+    const p=(navViaje?.boletas||[]).filter(b=>b.lat&&b.lon);
+    if(navParadaActual<p.length-1){navParadaActual++;updateNavDisplay();trazarRutaNav(p,state.userPosition);}
+    else if(confirm('¿Llegaste a la última parada? ¿Finalizar el viaje?'))finalizarViaje(navViaje.id);
+  });
+  document.getElementById('nav-prev')?.addEventListener('click',()=>{
+    if(navParadaActual>0){navParadaActual--;updateNavDisplay();const p=(navViaje?.boletas||[]).filter(b=>b.lat&&b.lon);trazarRutaNav(p,state.userPosition);}
+  });
+  document.getElementById('nav-fin')?.addEventListener('click',()=>{if(confirm('¿Finalizar el viaje?'))finalizarViaje(navViaje.id);});
+}
+
+// =============================================
+// HELPERS
+// =============================================
+function haversineJS(a,b,c,d){const R=6371,x=(c-a)*Math.PI/180,y=(d-b)*Math.PI/180,e=Math.sin(x/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(e),Math.sqrt(1-e));}
+
+function logout(){detenerSeguimientoUbicacion();sessionStorage.removeItem('tr_user');state.user=null;state.page='boletas';render();}
+
+function formatTime(ts){if(!ts)return'';const d=new Date(ts);return d.toLocaleDateString('es-AR')+' '+d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});}
+
+function applyModo(){const m=localStorage.getItem('tr_modo')||'oscuro';document.body.classList.toggle('modo-claro',m==='claro');}
+
+function toggleModo(){const a=localStorage.getItem('tr_modo')||'oscuro',n=a==='oscuro'?'claro':'oscuro';localStorage.setItem('tr_modo',n);applyModo();render();}
+
+applyModo();
+render();
+</script>
+</body>
+</html>
