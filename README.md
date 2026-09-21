@@ -70,9 +70,64 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
     ├── migracion_geo_aproximada.sql
     ├── migracion_pospuesta.sql
     └── migracion_zonas.sql
+```
+
+---
+
+## 🔐 Matriz de Permisos por Rol
+
+| Módulo / Función | Administrador | Adm. Operativo | Repartidor |
+| :--- | :---: | :---: | :---: |
+| **Panel Dashboard & Métricas** | ✔️ | ✔️ | ❌ |
+| **Ver Hoja de Ruta Propia** | ✔️ | ✔️ | ✔️ |
+| **Carga e Ingesta de Boletas (PDF)** | ✔️ | ✔️ | ❌ |
+| **Armado y Confirmación de Viajes** | ✔️ | ✔️ | ❌ |
+| **Iniciar Viaje / Navegación externa** | ❌ | ❌ | ✔️ |
+| **Tracking de Flota en Vivo** | ✔️ | ✔️ | ❌ |
+| **Gestión de Alertas** | ✔️ | ✔️ | ❌ |
+| **Configuración de Choferes y Camiones** | ✔️ | ✔️ | ❌ |
+
+---
 
 ## 🚀 Instalación y Configuración Local
 
-1. **Clonar el repositorio:**
-   ```bash
-   git clone [https://github.com/tu-usuario/tres-reyes-logistica.git](https://github.com/tu-usuario/tres-reyes-logistica.git)
+1. **Configurar el servidor local:**
+   * Mover los archivos a la carpeta raíz de tu servidor local (ej. `htdocs` en XAMPP o `www` en WampServer).
+
+2. **Configurar la base de datos:**
+   * Crear una base de datos en MySQL/phpMyAdmin (ejemplo: `tres_reyes_db`).
+   * Ejecutar en orden secuencial los scripts SQL ubicados en la carpeta de `migraciones/` para generar las tablas.
+
+3. **Configurar Credenciales:**
+   * Modificar el archivo `config.php` indicando host, usuario, contraseña y nombre de la base de datos local.
+   * Modificar el archivo `config_api.php` para ingresar tu propia clave de **Google Maps API Key**.
+
+4. **Ejecutar el proyecto:**
+   * Abrir en tu navegador local la ruta correspondiente (ej. `http://localhost/truckroute`).
+
+---
+
+## 📚 Enlaces y Documentación Complementaria
+
+* **Plataforma en vivo:** [https://tres-reyes-logistica.page.gd](https://tres-reyes-logistica.page.gd)
+* **Documentación Técnica:** [Documentación del Proyecto en GitHub Pages](https://varelajoaquin2007-rgb.github.io/Documentacion_Tres-Reyes/)
+* **Manual de Usuario:** [QuickStart Guide / Manual de Inicio Rápido](https://varelajoaquin2007-rgb.github.io/QuickStartGuide_TresReyes/)
+
+---
+
+## 👥 Equipo de Desarrollo
+
+Proyecto desarrollado por el **Equipo N.º 5** — Instituto Leonardo Murialdo (7.º Informática):
+
+* **Varela, Joaquín Ezequiel** - *Project Manager & Diseñador UX/UI*
+* **Silva** - *Administrador de Base de Datos*
+* **Traverso** - *Desarrollador Front/Back End*
+* **Crupi** - *Desarrollador Front/Back End*
+* **Garcia** - *Desarrollador Front End*
+* **Gurschpon** - *Encargado Administrativo*
+* **Rodriguez** - *Encargado Administrativo*
+
+**Soporte Técnico & Contacto:** `proyectointermiami@gmail.com`
+
+---
+*TruckRoute v1.0 · Desarrollado para Tres Reyes — Aceitunas y Encurtidos*
