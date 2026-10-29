@@ -397,7 +397,7 @@ const API = 'https://tres-reyes-logistica.page.gd';
 // Mapa del panel de administrador con Google Maps JavaScript API. Esta
 // key viaja al navegador (es lo normal para Maps JS); lo que la protege
 // es la restricción por dominio configurada en Google Cloud.
-const GOOGLE_MAPS_KEY = 'AIzaSyCO5nKrATJRFBlYvyO1_ZQLSs2w7MDoI1Q';
+const GOOGLE_MAPS_KEY = 'TU_KEY_DE_NAVEGADOR';
 let googleMapsPromise = null;
 function cargarGoogleMaps() {
   // OJO: sin "&loading=async". Con ese parámetro, Google no deja lista
@@ -471,6 +471,7 @@ let state = {
   userPosition: null,  // GPS del repartidor en tiempo real
   loginView: 'login',  // 'login' | 'recuperar' | 'reset'
   resetToken: null,
+  pospuestasCount: 0,
 };
 
 // Si llegamos desde el link del mail de recuperación (?reset=TOKEN),
@@ -753,6 +754,7 @@ function renderAdmin() {
         ${navItems.map(n=>`
           <div class="nav-item ${state.page===n.id?'active':''}" data-page="${n.id}">
             <span>${n.icon}</span> ${n.label}
+            ${n.id==='pospuestas' && state.pospuestasCount > 0 ? `<span style="background:var(--rojo,#e53e3e);color:#fff;border-radius:9999px;font-size:11px;font-weight:700;padding:1px 7px;margin-left:auto">${state.pospuestasCount}</span>` : ''}
           </div>
         `).join('')}
       </nav>
@@ -794,6 +796,27 @@ function bindAdmin() {
     document.getElementById('sidebar-overlay')?.classList.remove('open');
   });
   loadCurrentAdminPage();
+  refreshPospuestasCount();
+}
+
+async function refreshPospuestasCount() {
+  const r = await api('boletas.php?pospuestas=1');
+  const count = r.success ? (r.boletas || []).length : 0;
+  if (count !== state.pospuestasCount) {
+    state.pospuestasCount = count;
+    // Re-render only the nav badge (no full re-render)
+    document.querySelectorAll('.nav-item[data-page="pospuestas"]').forEach(el => {
+      const existing = el.querySelector('.pospuestas-badge');
+      if (existing) existing.remove();
+      if (count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'pospuestas-badge';
+        badge.style.cssText = 'background:var(--rojo,#e53e3e);color:#fff;border-radius:9999px;font-size:11px;font-weight:700;padding:1px 7px;margin-left:auto';
+        badge.textContent = count;
+        el.appendChild(badge);
+      }
+    });
+  }
 }
 
 function loadCurrentAdminPage() {
@@ -871,44 +894,11 @@ function renderBoletas() {
     <input type="file" id="pdf-input" accept=".pdf" multiple style="display:none" />
   </div>
 
-  <div class="mb-4">
-    <button class="btn btn-secondary btn-sm" id="carga-manual-btn">➕ Cargar boleta manual</button>
-  </div>
-  <div id="carga-manual-form" style="display:none" class="card mb-4">
-    <h3 class="mb-4" style="font-size:15px">Nueva boleta manual</h3>
-    <p class="text-sm text-muted mb-4">Sirve para probar direcciones nuevas, o para cargar un pedido que no vino en PDF. Usá el mismo formato de las facturas: dirección, localidad y código postal (CPA) de esa dirección puntual.</p>
-    <div class="form-row mb-4">
-      <div class="form-group"><label>Cliente</label><input type="text" id="cm-cliente" placeholder="Nombre del cliente" /></div>
-      <div class="form-group"><label>Zona (1 a 6)</label><input type="text" id="cm-zona" placeholder="1" /></div>
-    </div>
-    <div class="form-row mb-4">
-      <div class="form-group"><label>Dirección (calle y altura)</label><input type="text" id="cm-direccion" placeholder="Sarmiento 1000" /></div>
-      <div class="form-group"><label>Localidad</label><input type="text" id="cm-localidad" placeholder="San Miguel" /></div>
-    </div>
-    <div class="form-row mb-4">
-      <div class="form-group"><label>Código postal (CPA)</label><input type="text" id="cm-cp" placeholder="B1663AAA" /></div>
-      <div class="form-group"><label>Peso (kg)</label><input type="number" id="cm-peso" placeholder="50" /></div>
-    </div>
-    <div class="flex gap-2">
-      <button class="btn btn-primary btn-sm" id="guardar-manual-btn">Guardar y geolocalizar</button>
-      <button class="btn btn-secondary btn-sm" id="cancelar-manual-btn">Cancelar</button>
-    </div>
-  </div>
 
   <div id="pdf-progress" style="display:none" class="card mb-4">
     <div class="loading"><div class="spinner"></div> Procesando PDF...</div>
   </div>
 
-  ${state.boletas.length > 0 ? `
-  <div class="flex gap-2 mb-4" style="flex-wrap:wrap">
-    ${state.boletas.filter(b=>b.estado==='asignada'||b.estado==='entregada').length > 0 ? `
-    <button class="btn btn-danger btn-sm" id="limpiar-asignadas-btn">🗑 Limpiar boletas asignadas (${state.boletas.filter(b=>b.estado==='asignada'||b.estado==='entregada').length})</button>` : ''}
-    <button class="btn btn-danger btn-sm" id="limpiar-todo-btn">🗑 Limpiar todas las boletas del día</button>
-  </div>` : ''}
-  <div class="mb-4">
-    <button class="btn btn-danger btn-sm" id="borrar-todo-btn" style="opacity:.85">🗑️ Borrar TODO (todas las fechas, sin excepción)</button>
-    <p class="text-sm text-muted mt-2">Borra absolutamente todas las boletas y viajes del sistema, de cualquier fecha. No se puede deshacer.</p>
-  </div>
 
   ${sinGeo > 0 ? `
   <div class="card mb-4" style="border-left:3px solid var(--amarillo)">
@@ -938,7 +928,7 @@ function renderBoletas() {
   <div class="boletas-grid" id="boletas-grid">
     ${state.boletas.map(b => `
     <div class="boleta-card ${b.lat&&b.lon?'geocoded':'sin-geo'}" data-id="${b.id}">
-      <div class="boleta-nombre">${b.cliente}</div>
+      <div class="boleta-nombre">${b.cliente} ${nroBoleta(b)}</div>
       <div class="boleta-dir">📍 ${b.direccion}</div>
       <div class="flex gap-2 items-center mb-2" style="flex-wrap:wrap">
         ${b.barrio ? `<span class="text-sm text-muted">🏘 ${b.barrio}</span>` : ''}
@@ -950,16 +940,30 @@ function renderBoletas() {
           <span class="tag ${b.lat&&b.lon?(Number(b.geo_aproximada)?'tag-amarillo':'tag-verde'):'tag-amarillo'}">${b.lat&&b.lon?(Number(b.geo_aproximada)?'≈ GPS aprox.':'✓ GPS'):'Sin GPS'}</span>
           <button class="delete-btn" data-editar="${b.id}" title="Editar dirección/zona" style="color:var(--azul)">✏️</button>
           <button class="delete-btn" data-regeo="${b.id}" title="Volver a ubicar en el mapa" style="color:var(--verde)">📍</button>
-          ${b.estado!=='entregada'?`<button class="delete-btn" data-id="${b.id}" title="Eliminar">✕</button>`:''}
+          <button class="delete-btn" data-id="${b.id}" title="Eliminar">✕</button>
         </div>
       </div>
       <div class="editar-cliente-form" id="editar-form-${b.id}" style="display:none;margin-top:10px;border-top:1px solid #2E2E2E;padding-top:10px">
-        <label class="text-sm text-muted">Dirección</label>
-        <input type="text" id="edit-dir-${b.id}" value="${(b.direccion||'').replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px" />
-        <label class="text-sm text-muted">Localidad</label>
-        <input type="text" id="edit-loc-${b.id}" value="${(b.barrio||'').replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px" />
-        <label class="text-sm text-muted">Zona</label>
-        <input type="text" id="edit-zona-${b.id}" value="${b.zona||''}" style="width:100%;margin-bottom:8px" />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <div>
+            <label class="text-sm text-muted">Dirección (calle y altura)</label>
+            <input type="text" id="edit-dir-${b.id}" value="${(b.direccion||'').replace(/"/g,'&quot;')}" style="width:100%" />
+          </div>
+          <div>
+            <label class="text-sm text-muted">Código postal</label>
+            <input type="text" id="edit-cp-${b.id}" value="${(b.cp||'').replace(/"/g,'&quot;')}" style="width:100%" placeholder="B1663AAA" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+          <div>
+            <label class="text-sm text-muted">Localidad</label>
+            <input type="text" id="edit-loc-${b.id}" value="${(b.barrio||'').replace(/"/g,'&quot;')}" style="width:100%" />
+          </div>
+          <div>
+            <label class="text-sm text-muted">Zona</label>
+            <input type="text" id="edit-zona-${b.id}" value="${b.zona||''}" style="width:100%" />
+          </div>
+        </div>
         <div class="flex gap-2">
           <button class="btn btn-primary btn-sm" data-guardar-edit="${b.id}">Guardar</button>
           <button class="btn btn-secondary btn-sm" data-cancelar-edit="${b.id}">Cancelar</button>
@@ -1058,41 +1062,16 @@ function bindBoletasPage() {
   // Geo all
   document.getElementById('geo-all-btn')?.addEventListener('click', geocodificarTodas);
 
-  // Limpiar boletas
-  document.getElementById('limpiar-asignadas-btn')?.addEventListener('click', async () => {
-    if (!confirm('¿Borrar las boletas ya asignadas a viajes?')) return;
-    const ids = state.boletas.filter(b=>b.estado==='asignada'||b.estado==='entregada').map(b=>b.id);
-    for (const id of ids) await api(`boletas.php?id=${id}`, 'DELETE');
-    toast('✅ Boletas asignadas eliminadas');
-    await loadBoletas();
-  });
-
-  document.getElementById('limpiar-todo-btn')?.addEventListener('click', async () => {
-    if (!confirm('¿Borrar TODAS las boletas del día? Esto no afecta los viajes ya confirmados.')) return;
-    const ids = state.boletas.map(b=>b.id);
-    for (const id of ids) await api(`boletas.php?id=${id}`, 'DELETE');
-    toast('✅ Boletas limpiadas');
-    await loadBoletas();
-  });
-
-  // Borrado total: cualquier fecha, cualquier estado, incluidos viajes.
-  // Doble confirmación por ser irreversible.
-  document.getElementById('borrar-todo-btn')?.addEventListener('click', async () => {
-    if (!confirm('¿BORRAR TODO? Esto elimina absolutamente todas las boletas y viajes del sistema, de cualquier fecha (incluidas las ya entregadas). No hay forma de deshacerlo. ¿Continuar?')) return;
-    if (!confirm('Última confirmación: se va a borrar TODO el historial de boletas y viajes. ¿Estás seguro?')) return;
-    const r = await api('boletas.php', 'POST', { action: 'borrar_todo' });
-    if (r.success) { toast('✅ ' + r.message); await loadBoletas(); }
-    else toast(r.message || 'No se pudo borrar', 'error');
-  });
 }
 
 async function guardarEdicionCliente(id) {
   const direccion = document.getElementById(`edit-dir-${id}`).value.trim();
   const barrio = document.getElementById(`edit-loc-${id}`).value.trim();
   const zona = document.getElementById(`edit-zona-${id}`).value.trim();
+  const cp = document.getElementById(`edit-cp-${id}`)?.value.trim() || '';
   if (!direccion) { toast('La dirección no puede quedar vacía', 'error'); return; }
 
-  const r = await api('boletas.php', 'POST', { action:'editar_cliente', id:parseInt(id), direccion, barrio, zona });
+  const r = await api('boletas.php', 'POST', { action:'editar_cliente', id:parseInt(id), direccion, barrio, zona, cp });
   if (!r.success) { toast(r.message || 'No se pudo guardar', 'error'); return; }
 
   // Si cambió la dirección/localidad, hay que volver a ubicar en el mapa.
@@ -1337,14 +1316,27 @@ function parseBoleta(rawText) {
   const zonaMatch = clean.match(/zona\s*:?\s*(?:zona\s*)?([0-9]{1,2})/i);
   if (zonaMatch) zona = zonaMatch[1].trim();
 
-  // PESO TOTAL: "Peso Total: 312,92 Bultos:" (Formato 1) o
-  // "Peso Total : 147,64 Total :" (Formato 2, sin "Bultos"). Acepta
-  // coma o punto como separador decimal.
-  const pw = clean.match(/Peso\s*Total\s*[:\s]+([0-9]+[.,][0-9]+)\s*Bultos/i)
-          || clean.match(/([0-9]+[.,][0-9]+)\s*Bultos/i)
-          || clean.match(/Peso\s*Total\s*[:\s]+([0-9]+[.,][0-9]+)/i)
-          || clean.match(/Peso\s*Total\s*[:\s]+([0-9]+)\s*Bultos/i);
-  if (pw) peso = parseFloat(pw[1].replace(',','.'));
+  // PESO TOTAL — dos formatos:
+  // Formato 1 (Factura A): "Peso Total: 189.84 Bultos:" → punto=decimal, sin coma
+  // Formato 2 (Cobranza):  "Peso Total : 1.610,00"      → punto=miles, coma=decimal
+  // Se detecta el formato por la presencia de coma.
+  const pw = clean.match(/Peso\s*Total\s*[:\s]+([\d.]+,\d+)\s*Bultos/i)
+          || clean.match(/([\d.]+,\d+)\s*Bultos/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+([\d.]+,\d+)/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+(\d+\.\d+)\s*Bultos/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+(\d+\.\d+)/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+([0-9]+)\s*Bultos/i)
+          || clean.match(/Peso\s*Total\s*[:\s]+([0-9]+)/i);
+  if (pw) {
+    const raw = pw[1];
+    if (raw.includes(',')) {
+      // Formato argentino: 1.610,00 → quitar puntos de miles, coma → punto
+      peso = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+    } else {
+      // Formato internacional: 189.84 → parsear directo
+      peso = parseFloat(raw);
+    }
+  }
 
   // NOTA: ya no se agrega ", Buenos Aires" genérico acá — la localidad
   // real (Derqui, Muñiz, Polvorines, etc.) ya se extrajo por separado
@@ -1364,7 +1356,31 @@ function parseBoleta(rawText) {
     return [];
   }
 
-  return [{ cliente, direccion, peso_kg: peso || 50, barrio: localidad, cp: cpEntrega, zona, notas: '', lat, lon }];
+  // NÚMERO DE BOLETA: "N° 0006-00002396". El PDF lo trae en trozos
+  // separados (a veces sin guion y sin el "°"), por eso se toleran
+  // espacios y guion opcional entre punto de venta (4) y número (8).
+  let numero_boleta = '';
+  const nb = clean.match(/\bN\s*[°º.]?\s*(\d{4})\s*-?\s*(\d{8})\b/i);
+  if (nb) numero_boleta = `${nb[1]}-${nb[2]}`;
+  // Formato 2 (cobranza / nota de pedido): "N°Cob : 00004672  A". El
+  // símbolo "°" se borra al limpiar, así que queda "N Cob : 00004672".
+  // La letra suelta del final (A) es el tipo de comprobante, no se guarda.
+  if (!numero_boleta) {
+    const nc = clean.match(/\bN\s*[°º.]?\s*Cob\s*:?\s*(\d{4,10})\b/i);
+    if (nc) numero_boleta = nc[1];
+  }
+
+  return [{ cliente, numero_boleta, direccion, peso_kg: peso || 50, barrio: localidad, cp: cpEntrega, zona, notas: '', lat, lon }];
+}
+
+// "N° 0006-00002396" listo para mostrar junto al nombre del cliente.
+function nroBoleta(b) {
+  return b && b.numero_boleta ? `<span class="text-muted" style="font-weight:400;font-size:.85em">· N° ${escapeHtmlTracking(b.numero_boleta)}</span>` : '';
+}
+
+// Cantidad real de paradas: boletas de una misma dirección cuentan como una.
+function cantParadas(boletas) {
+  return agruparParadasHistorico(boletas || []).length;
 }
 
 
@@ -1430,12 +1446,25 @@ function renderArmar() {
   </div>
   <div class="flex gap-3 mb-4" style="flex-wrap:wrap;align-items:center">
     <button class="btn btn-secondary btn-sm" id="armar-btn">↻ Actualizar viajes pendientes</button>
+    <button class="btn btn-secondary btn-sm" id="pospuestas-todas-btn" title="Devuelve todas las boletas pospuestas a pendientes y se agrupan en el viaje de su zona">↩️ Pasar todas las pospuestas a pendientes</button>
   </div>
   <div id="viajes-preview"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
 }
 
 function bindArmarPage() {
   document.getElementById('armar-btn')?.addEventListener('click', armarViajes);
+  document.getElementById('pospuestas-todas-btn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    if (!confirm('¿Pasar TODAS las boletas pospuestas a pendientes? Se van a sumar al viaje de su zona.')) return;
+    btn.disabled = true;
+    const r = await api('viajes.php','POST',{action:'reactivar_todas_pospuestas'});
+    btn.disabled = false;
+    if (r.success) {
+      toast(r.cantidad > 0 ? '✅ '+r.message : r.message);
+      refreshPospuestasCount();
+      if (r.cantidad > 0) armarViajes();
+    } else toast(r.message||'Error','error');
+  });
   armarViajes();
 }
 
@@ -1475,7 +1504,7 @@ async function cargarPospuestasPage() {
     <div class="card">
       <div class="flex gap-3" style="justify-content:space-between;flex-wrap:wrap;align-items:center">
         <div>
-          <div style="font-weight:700">${b.cliente}</div>
+          <div style="font-weight:700">${b.cliente} ${nroBoleta(b)}</div>
           <div class="text-sm text-muted">${b.direccion} · Zona ${b.zona||'—'} · ${b.peso_kg} kg</div>
         </div>
         <div class="flex gap-2 items-center">
@@ -1493,14 +1522,14 @@ async function cargarPospuestasPage() {
     sel.addEventListener('change', async () => {
       if (!sel.value) return;
       const r = await api('viajes.php','POST',{action:'agregar_pospuesta_a_viaje', boleta_id:parseInt(sel.dataset.bid), viaje_destino:parseInt(sel.value)});
-      if (r.success) { toast('✅ '+r.message); await cargarPospuestasPage(); }
+      if (r.success) { toast('✅ '+r.message); await cargarPospuestasPage(); refreshPospuestasCount(); }
       else { toast(r.message||'No se pudo agregar','error'); sel.value=''; }
     });
   });
   document.querySelectorAll('.pospuesta-reactivar-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const r = await api('viajes.php','POST',{action:'reactivar_pospuesta', boleta_id:parseInt(btn.dataset.bid)});
-      if (r.success) { toast('✅ '+r.message); await cargarPospuestasPage(); }
+      if (r.success) { toast('✅ '+r.message); await cargarPospuestasPage(); refreshPospuestasCount(); }
       else toast(r.message||'Error','error');
     });
   });
@@ -1508,7 +1537,7 @@ async function cargarPospuestasPage() {
     btn.addEventListener('click', async () => {
       if (!confirm('¿Eliminar esta boleta definitivamente? No se puede deshacer.')) return;
       const r = await api(`boletas.php?id=${btn.dataset.bid}`, 'DELETE');
-      if (r.success) { toast('✅ Boleta eliminada'); await cargarPospuestasPage(); }
+      if (r.success) { toast('✅ Boleta eliminada'); await cargarPospuestasPage(); refreshPospuestasCount(); }
       else toast(r.message||'No se pudo eliminar','error');
     });
   });
@@ -1524,6 +1553,8 @@ async function armarViajes() {
   state.camiones     = repR.camiones || [];
   const destR = await api('config_api.php','POST',{action:'listar_destinos'});
   state.destinos = (destR.success && destR.destinos) ? destR.destinos : [];
+  const ocupR = await api('viajes.php?ocupacion=1');
+  state.camionOcupacion = (ocupR.success && ocupR.ocupacion) ? ocupR.ocupacion : [];
 
   const preview = document.getElementById('viajes-preview');
   if (btn) { btn.disabled = false; btn.textContent = '↻ Actualizar viajes pendientes'; }
@@ -1536,7 +1567,12 @@ async function armarViajes() {
     return;
   }
 
-  const disponibles = state.camiones.filter(c => c.estado === 'disponible');
+  // Camiones que se pueden elegir: los disponibles y los que están en
+  // viaje ahora (esos solo valen si el viaje sale otro día). Los que están
+  // en mantenimiento no aparecen hasta que cambien de estado.
+  const disponibles = state.camiones.filter(c => c.estado === 'disponible' || c.estado === 'en_viaje');
+  const opcionCamion = c => `<option value="${c.id}" data-cap="${c.capacidad_kg}" data-estado="${c.estado}">🚛 ${c.patente}${c.marca?' — '+c.marca:''}${c.modelo?' '+c.modelo:''} (${c.capacidad_kg} kg)${c.estado==='en_viaje'?' · en viaje ahora':''}</option>`;
+  const hoyISO = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
   const colors = ['#2ecc71','#3B82F6','#F5C518','#E53E3E','#a855f7','#f97316'];
   // Color FIJO por número de zona: la Zona 1 siempre el mismo color, la
   // Zona 2 otro, etc. Así, al mover una boleta a otra zona, su punto en
@@ -1550,8 +1586,42 @@ async function armarViajes() {
   };
 
   preview.innerHTML = `
-  <h2 style="margin-bottom:16px">Zonas pendientes de salir (${r.viajes.length})</h2>
+  <div class="flex gap-3 mb-4" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+    <h2>Zonas pendientes de salir (${r.viajes.length})</h2>
+    <button class="btn btn-secondary btn-sm" id="retiro-prov-btn">📦 Retiro de proveedor</button>
+  </div>
   <p class="text-sm text-muted mb-4">Mirá el mapa para ver si dos zonas cercanas conviene mandarlas el mismo día con el mismo camión.</p>
+
+  <div id="retiro-prov-modal" style="display:none" class="card mb-4" style="border-left:3px solid var(--azul)">
+    <h3 class="mb-4" style="font-size:15px">📦 Agregar retiro de proveedor</h3>
+    <p class="text-sm text-muted mb-4">El repartidor pasa a buscar un pedido en la dirección del proveedor antes o después de sus entregas. Se agrega como una parada al viaje que elijas.</p>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Nombre del pedido / proveedor</label><input type="text" id="rp-nombre" placeholder="Ej: Proveedor García" /></div>
+      <div class="form-group"><label>Zona (viaje al que se suma)</label>
+        <select id="rp-viaje">
+          <option value="">Elegí un viaje...</option>
+          ${r.viajes.map(v=>`<option value="${v.id}">Zona ${v.zona} (${cantParadas(v.boletas)} paradas · ${(v.boletas||[]).length} boletas)</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Calle</label><input type="text" id="rp-calle" placeholder="Av. Rivadavia" /></div>
+      <div class="form-group"><label>Altura</label><input type="text" id="rp-altura" placeholder="4500" /></div>
+    </div>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Localidad</label><input type="text" id="rp-localidad" placeholder="San Miguel" /></div>
+      <div class="form-group"><label>Código postal</label><input type="text" id="rp-cp" placeholder="B1663" /></div>
+    </div>
+    <div class="form-row mb-4">
+      <div class="form-group"><label>Provincia</label><input type="text" id="rp-provincia" placeholder="Buenos Aires" value="Buenos Aires" /></div>
+      <div class="form-group"><label>Peso aprox. (kg)</label><input type="number" id="rp-peso" placeholder="0" value="0" /></div>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-primary btn-sm" id="rp-guardar-btn">Agregar parada</button>
+      <button class="btn btn-secondary btn-sm" id="rp-cancelar-btn">Cancelar</button>
+    </div>
+    <p class="text-sm text-muted mt-2" id="rp-status"></p>
+  </div>
   <div id="preview-map" style="height:320px;border-radius:12px;margin-bottom:20px;border:1px solid #2E2E2E"></div>
   ${r.viajes.length > 1 ? `
   <div class="card mb-4" id="bulk-bar" style="border-left:3px solid var(--verde)">
@@ -1559,15 +1629,16 @@ async function armarViajes() {
       <strong id="bulk-count" style="min-width:170px">0 zonas seleccionadas</strong>
       <select id="bulk-cam-sel" style="width:200px" ${!disponibles.length?'disabled':''}>
         <option value="">${disponibles.length?'Camión para las seleccionadas...':'No hay camiones disponibles'}</option>
-        ${disponibles.map(c=>`<option value="${c.id}" data-cap="${c.capacidad_kg}">🚛 ${c.patente}${c.marca?' — '+c.marca:''}${c.modelo?' '+c.modelo:''} (${c.capacidad_kg} kg)</option>`).join('')}
+        ${disponibles.map(opcionCamion).join('')}
       </select>
+      <label class="text-sm text-muted">📅 Sale el:</label>
+      <input type="date" id="bulk-dia" min="${hoyISO}" style="width:150px" title="Día de salida (vacío = hoy)" />
       <select id="bulk-rep-sel" style="width:180px">
         <option value="">Sin repartidor</option>
         ${state.repartidores.map(rep=>`<option value="${rep.id}">${rep.nombre}</option>`).join('')}
       </select>
       <select id="bulk-destino-sel" style="width:180px" title="Dónde termina el viaje">
-        <option value="">🏁 Última entrega (sin elegir punto)</option>
-        ${(state.destinos||[]).map(d=>`<option value="${d.id}">🏁 ${d.nombre}</option>`).join('')}
+        <option value="deposito">🏭 Depósito</option>
       </select>
       <button class="btn btn-primary btn-sm" id="bulk-confirmar-btn" disabled>✅ Confirmar zonas seleccionadas</button>
     </div>
@@ -1584,23 +1655,22 @@ async function armarViajes() {
           ${r.viajes.length > 1 ? `<input type="checkbox" class="zona-check" data-vid="${v.id}" data-peso="${parseFloat(v.peso_total)||0}" style="width:20px;height:20px;margin-top:4px" />` : ''}
           <div>
             <h3><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};margin-right:6px"></span>🗺️ Zona ${v.zona}</h3>
-            <div class="text-sm text-muted mt-2">${(v.boletas||[]).length} paradas · ${parseFloat(v.peso_total).toFixed(0)} kg</div>
+            <div class="text-sm text-muted mt-2">${cantParadas(v.boletas)} paradas · ${(v.boletas||[]).length} boletas · ${parseFloat(v.peso_total).toFixed(0)} kg</div>
           </div>
         </div>
         <div class="flex gap-2 items-center" style="flex-wrap:wrap">
           <label class="text-sm text-muted">📅 Sale el:</label>
-          <input type="date" class="dia-salida-input" data-vid="${v.id}" value="${v.dia_salida || ''}" style="width:150px" title="Día planeado de salida (solo para tu organización)" />
+          <input type="date" class="dia-salida-input" data-vid="${v.id}" min="${hoyISO}" value="${v.dia_salida && v.dia_salida >= hoyISO ? v.dia_salida : ''}" style="width:150px" title="Día de salida (vacío = hoy)" />
           <select id="cam-sel-${v.id}" style="width:200px" ${!disponibles.length?'disabled':''}>
             <option value="">${disponibles.length?'Elegí un camión...':'No hay camiones disponibles'}</option>
-            ${disponibles.map(c=>`<option value="${c.id}" data-cap="${c.capacidad_kg}">🚛 ${c.patente}${c.marca?' — '+c.marca:''}${c.modelo?' '+c.modelo:''} (${c.capacidad_kg} kg)</option>`).join('')}
+            ${disponibles.map(opcionCamion).join('')}
           </select>
           <select id="rep-sel-${v.id}" style="width:180px">
             <option value="">Sin repartidor</option>
             ${state.repartidores.map(rep=>`<option value="${rep.id}">${rep.nombre}</option>`).join('')}
           </select>
           <select id="destino-sel-${v.id}" style="width:180px" title="Dónde termina el viaje">
-            <option value="">🏁 Última entrega (sin elegir punto)</option>
-            ${(state.destinos||[]).map(d=>`<option value="${d.id}">🏁 ${d.nombre}</option>`).join('')}
+            <option value="deposito">🏭 Depósito</option>
           </select>
           <button class="btn btn-primary btn-sm" id="confirmar-btn-${v.id}">✅ Confirmar salida</button>
           <button class="btn btn-danger btn-sm" id="eliminar-armado-btn-${v.id}" title="Borrar este viaje y sus boletas">🗑 Eliminar viaje</button>
@@ -1612,7 +1682,7 @@ async function armarViajes() {
         <div class="parada-row">
           <div class="parada-num">${j+1}</div>
           <div class="parada-info">
-            <div class="parada-cliente">${b.cliente}</div>
+            <div class="parada-cliente">${b.cliente} ${nroBoleta(b)}</div>
             <div class="parada-dir">${b.direccion} <span class="text-muted">· Zona ${b.zona||'—'}</span></div>
             <div class="parada-peso">${b.peso_kg} kg</div>
           </div>
@@ -1622,7 +1692,7 @@ async function armarViajes() {
               <option value="">Mover a...</option>
               ${r.viajes.filter(x=>x.id!==v.id).map(x=>`<option value="${x.id}">→ Zona ${x.zona}</option>`).join('')}
             </select>` : ''}
-            <button class="btn btn-danger btn-sm sacar-parada-btn" data-bid="${b.id}" title="Sacar del viaje y dejar pendiente">✕ Sacar</button>
+            <button class="btn btn-secondary btn-sm sacar-parada-btn" data-bid="${b.id}" title="Sacar del viaje y dejar en pospuestas">Posponer</button>
           </div>
         </div>`).join('')}
       </div>
@@ -1667,7 +1737,43 @@ async function armarViajes() {
     });
     document.getElementById(`confirmar-btn-${v.id}`)?.addEventListener('click', () => confirmarViaje(v.id));
     document.getElementById(`eliminar-armado-btn-${v.id}`)?.addEventListener('click', () => eliminarViajeArmado(v.id, v.zona));
+    // Actualizar la opción "Casa de [repartidor]" cuando cambia el rep
+    document.getElementById(`rep-sel-${v.id}`)?.addEventListener('change', () => actualizarDestinoOpciones(v.id));
+    // Llamar ahora para mostrar la casa si ya hay un repartidor preseleccionado
+    actualizarDestinoOpciones(v.id);
   });
+
+  // Camiones que se pueden elegir para un día dado: nunca los que están en
+  // mantenimiento ni los que ya tienen un viaje ese día (uno por día). Para
+  // hoy solo los disponibles; para un día posterior también los que están
+  // en viaje ahora.
+  function camionesParaDia(dia) {
+    const d = dia || hoyISO;
+    const ocupados = new Set((state.camionOcupacion || []).filter(o => String(o.fecha).slice(0,10) === d).map(o => String(o.camion_id)));
+    return state.camiones.filter(c =>
+      !ocupados.has(String(c.id)) &&
+      (c.estado === 'disponible' || (c.estado === 'en_viaje' && d > hoyISO)));
+  }
+  function refrescarCamionesSelect(selectId, dia) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const lista = camionesParaDia(dia);
+    const previo = sel.value;
+    sel.innerHTML = `<option value="">${lista.length ? 'Elegí un camión...' : 'No hay camiones disponibles ese día'}</option>` + lista.map(opcionCamion).join('');
+    sel.disabled = !lista.length;
+    sel.value = lista.some(c => String(c.id) === previo) ? previo : '';
+    sel.dispatchEvent(new Event('change'));
+  }
+  document.querySelectorAll('.dia-salida-input').forEach(inp => {
+    const selId = `cam-sel-${inp.dataset.vid}`;
+    refrescarCamionesSelect(selId, inp.value);
+    inp.addEventListener('change', () => refrescarCamionesSelect(selId, inp.value));
+  });
+  const bulkDiaInp = document.getElementById('bulk-dia');
+  if (bulkDiaInp) {
+    refrescarCamionesSelect('bulk-cam-sel', bulkDiaInp.value);
+    bulkDiaInp.addEventListener('change', () => refrescarCamionesSelect('bulk-cam-sel', bulkDiaInp.value));
+  }
 
   // Guardar día de salida planeado de cada zona (solo planificación admin)
   document.querySelectorAll('.dia-salida-input').forEach(inp => {
@@ -1694,7 +1800,7 @@ async function armarViajes() {
     btn.addEventListener('click', async () => {
       if (!confirm('¿Sacar esta boleta del viaje? Queda guardada en "Boletas pospuestas" hasta que la agregues a otro viaje.')) return;
       const r = await api('viajes.php','POST',{action:'quitar_parada', boleta_id:parseInt(btn.dataset.bid)});
-      if (r.success) { toast('✅ '+r.message); await armarViajes(); }
+      if (r.success) { toast('✅ '+r.message); await armarViajes(); refreshPospuestasCount(); }
       else toast(r.message||'Error','error');
     });
   });
@@ -1721,19 +1827,37 @@ async function armarViajes() {
   }
   document.querySelectorAll('.zona-check').forEach(chk => chk.addEventListener('change', actualizarBulk));
   bulkCamSel?.addEventListener('change', actualizarBulk);
+  // Casa del repartidor como punto de finalización, igual que en una zona sola.
+  const bulkRepSel = document.getElementById('bulk-rep-sel');
+  const bulkDestSel = document.getElementById('bulk-destino-sel');
+  bulkRepSel?.addEventListener('change', () => actualizarDestinoOpcionesEls(bulkRepSel, bulkDestSel));
+  actualizarDestinoOpcionesEls(bulkRepSel, bulkDestSel);
   bulkBtn?.addEventListener('click', () => {
     const ids = Array.from(document.querySelectorAll('.zona-check:checked')).map(chk => parseInt(chk.dataset.vid));
     confirmarVariasJuntas(ids);
   });
+
+  // Retiro de proveedor
+  document.getElementById('retiro-prov-btn')?.addEventListener('click', () => {
+    const m = document.getElementById('retiro-prov-modal');
+    if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('rp-cancelar-btn')?.addEventListener('click', () => {
+    const m = document.getElementById('retiro-prov-modal');
+    if (m) m.style.display = 'none';
+  });
+  document.getElementById('rp-guardar-btn')?.addEventListener('click', agregarRetiroProveedor);
 }
 
 async function confirmarVariasJuntas(viajeIds) {
   const camion_id = parseInt(document.getElementById('bulk-cam-sel')?.value || 0) || null;
   const repartidor_id = parseInt(document.getElementById('bulk-rep-sel')?.value || 0) || null;
-  const destino_id = parseInt(document.getElementById('bulk-destino-sel')?.value || 0) || null;
+  const destino_tipo = document.getElementById('bulk-destino-sel')?.value || null;
+  const dia_salida = document.getElementById('bulk-dia')?.value || '';
   if (!camion_id) { toast('Elegí el camión para las zonas seleccionadas', 'error'); return; }
+  if (!validarCamionEnViaje('bulk-cam-sel', dia_salida)) return;
 
-  const asignaciones = viajeIds.map(viaje_id => ({viaje_id, camion_id, repartidor_id, destino_id}));
+  const asignaciones = viajeIds.map(viaje_id => ({viaje_id, camion_id, repartidor_id, destino_tipo: destino_tipo || null, dia_salida: dia_salida || null}));
   const r = await api('viajes.php','POST',{action:'confirmar',fecha:state.fechaSeleccionada,asignaciones});
   if (r.success) {
     toast(`✅ ${viajeIds.length} zonas unificadas en un solo viaje con el mismo camión.`);
@@ -1743,6 +1867,93 @@ async function confirmarVariasJuntas(viajeIds) {
   }
 }
 
+function actualizarDestinoOpciones(viajeId) {
+  actualizarDestinoOpcionesEls(
+    document.getElementById(`rep-sel-${viajeId}`),
+    document.getElementById(`destino-sel-${viajeId}`));
+}
+
+// Arma las opciones de "dónde termina el viaje": el depósito, y la casa
+// del repartidor elegido si la tiene cargada.
+function actualizarDestinoOpcionesEls(repSel, destSel) {
+  if (!repSel || !destSel) return;
+  const repId = parseInt(repSel.value || 0) || null;
+  const rep = repId ? (state.repartidores || []).find(r => String(r.id) === String(repId)) : null;
+  const tieneHome = rep && rep.dest_lat;
+  const actual = destSel.value;
+  destSel.innerHTML = `
+    <option value="deposito">🏭 Depósito</option>
+    ${tieneHome ? `<option value="repartidor">🏠 Casa de ${rep.nombre}</option>` : ''}
+  `;
+  // Restaurar selección previa si sigue siendo válida
+  if (actual && destSel.querySelector(`option[value="${actual}"]`)) destSel.value = actual;
+  else destSel.value = 'deposito';
+}
+
+async function agregarRetiroProveedor() {
+  const nombre = document.getElementById('rp-nombre')?.value.trim();
+  const viajeId = parseInt(document.getElementById('rp-viaje')?.value || 0) || null;
+  const calle = document.getElementById('rp-calle')?.value.trim();
+  const altura = document.getElementById('rp-altura')?.value.trim();
+  const localidad = document.getElementById('rp-localidad')?.value.trim();
+  const cp = document.getElementById('rp-cp')?.value.trim();
+  const provincia = document.getElementById('rp-provincia')?.value.trim();
+  const peso = parseFloat(document.getElementById('rp-peso')?.value || 0) || 0;
+  const status = document.getElementById('rp-status');
+
+  if (!nombre) { toast('Escribí el nombre del pedido o proveedor', 'error'); return; }
+  if (!viajeId) { toast('Elegí a qué viaje se suma la parada', 'error'); return; }
+  if (!calle || !localidad) { toast('Completá la calle y localidad del proveedor', 'error'); return; }
+
+  const direccion = `${calle} ${altura}`.trim();
+  const btn = document.getElementById('rp-guardar-btn');
+  btn.disabled = true;
+  if (status) status.textContent = '⏳ Creando boleta...';
+
+  // 1) Crear la boleta como retiro
+  const crearR = await api('boletas.php', 'POST', {
+    action: 'crear',
+    cliente: `RETIRO: ${nombre}`,
+    direccion, barrio: localidad, cp, zona: '',
+    peso_kg: peso,
+    fecha: state.fechaSeleccionada,
+    notas: `Retiro de proveedor. ${provincia ? 'Provincia: '+provincia : ''}`.trim(),
+  });
+  if (!crearR.success) {
+    toast(crearR.message || 'No se pudo crear la boleta', 'error');
+    btn.disabled = false;
+    if (status) status.textContent = '';
+    return;
+  }
+  const boletaId = crearR.id;
+
+  // 2) Geocodificar
+  if (status) status.textContent = '📍 Geolocalizando...';
+  const geoR = await api('boletas.php', 'POST', { action: 'geocodificar', id: boletaId });
+  if (!geoR.success) toast('⚠️ No se pudo geolocalizar la dirección — revisá en Boletas', 'error');
+
+  // 3) Mover al viaje elegido
+  if (status) status.textContent = '🔗 Asignando al viaje...';
+  const moverR = await api('viajes.php', 'POST', { action: 'mover_boleta', boleta_id: boletaId, viaje_destino: viajeId });
+  if (!moverR.success) {
+    toast(moverR.message || 'No se pudo asignar al viaje', 'error');
+    btn.disabled = false;
+    if (status) status.textContent = '';
+    return;
+  }
+
+  toast(`✅ Retiro "${nombre}" agregado al viaje`);
+  document.getElementById('retiro-prov-modal').style.display = 'none';
+  btn.disabled = false;
+  if (status) status.textContent = '';
+  // Limpiar campos
+  ['rp-nombre','rp-calle','rp-altura','rp-localidad','rp-cp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id === 'rp-peso' ? '0' : '';
+  });
+  await armarViajes();
+}
+
 async function eliminarViajeArmado(viaje_id, zona) {
   if (!confirm(`¿Eliminar el viaje pendiente de la Zona ${zona}? Se van a borrar también sus boletas — si hacen falta, hay que volver a cargarlas.`)) return;
   const r = await api('viajes.php','POST',{action:'eliminar_armado',viaje_id:parseInt(viaje_id)});
@@ -1750,13 +1961,26 @@ async function eliminarViajeArmado(viaje_id, zona) {
   else toast(r.message||'Error','error');
 }
 
+// Un camión que está en viaje ahora solo se puede asignar a un viaje que
+// sale otro día (posterior a hoy).
+function validarCamionEnViaje(selectId, dia_salida) {
+  const opt = document.getElementById(selectId)?.selectedOptions[0];
+  if (opt?.dataset.estado !== 'en_viaje') return true;
+  const hoy = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  if (dia_salida && dia_salida > hoy) return true;
+  toast('Ese camión está en viaje ahora: elegí un día de salida posterior a hoy o usá otro camión', 'error');
+  return false;
+}
+
 async function confirmarViaje(viaje_id) {
   const camion_id = parseInt(document.getElementById(`cam-sel-${viaje_id}`)?.value || 0) || null;
   const repartidor_id = parseInt(document.getElementById(`rep-sel-${viaje_id}`)?.value || 0) || null;
-  const destino_id = parseInt(document.getElementById(`destino-sel-${viaje_id}`)?.value || 0) || null;
+  const destino_tipo = document.getElementById(`destino-sel-${viaje_id}`)?.value || null;
+  const dia_salida = document.querySelector(`.dia-salida-input[data-vid="${viaje_id}"]`)?.value || '';
   if (!camion_id) { toast('Elegí el camión que va a salir para esta zona', 'error'); return; }
+  if (!validarCamionEnViaje(`cam-sel-${viaje_id}`, dia_salida)) return;
 
-  const r = await api('viajes.php','POST',{action:'confirmar',fecha:state.fechaSeleccionada,asignaciones:[{viaje_id,camion_id,repartidor_id,destino_id}]});
+  const r = await api('viajes.php','POST',{action:'confirmar',fecha:state.fechaSeleccionada,asignaciones:[{viaje_id,camion_id,repartidor_id,destino_tipo:destino_tipo||null,dia_salida:dia_salida||null}]});
   if (r.success) {
     toast('✅ Viaje confirmado. El camión ya figura "en viaje".');
     await armarViajes();
@@ -1806,7 +2030,7 @@ function renderViajesAdminList() {
         <h3>🚛 ${v.patente||'Sin camión'} — Zona ${v.zona||'—'}</h3>
         <div class="flex gap-2 items-center mt-2">
           ${estadoTag[v.estado]||''} ${v.repartidor_nombre?`<span class="tag tag-gris">👤 ${v.repartidor_nombre}</span>`:''}
-          <span class="text-sm text-muted">${v.peso_total} kg · ${(v.boletas||[]).length} paradas</span>
+          <span class="text-sm text-muted">${v.peso_total} kg · ${cantParadas(v.boletas)} paradas · ${(v.boletas||[]).length} boletas</span>
         </div>
         ${v.started_at?`<div class="text-sm text-muted mt-2">▶ Inicio: ${formatTime(v.started_at)}</div>`:''}
         ${v.finished_at?`<div class="text-sm text-muted">✓ Fin: ${formatTime(v.finished_at)}</div>`:''}
@@ -1820,7 +2044,7 @@ function renderViajesAdminList() {
     <div class="flex gap-2 items-center" style="padding:0 16px 12px;flex-wrap:wrap">
       <select class="agregar-parada-sel" data-vid="${v.id}" style="width:260px" ${!(state.boletasSinAsignar||[]).length?'disabled':''}>
         <option value="">${(state.boletasSinAsignar||[]).length?'➕ Agregar una boleta a este viaje...':'No hay boletas sueltas para agregar'}</option>
-        ${(state.boletasSinAsignar||[]).map(b=>`<option value="${b.id}">${b.cliente} — ${b.direccion} (${b.peso_kg} kg)</option>`).join('')}
+        ${(state.boletasSinAsignar||[]).map(b=>`<option value="${b.id}">${b.cliente}${b.numero_boleta?' · N° '+b.numero_boleta:''} — ${b.direccion} (${b.peso_kg} kg)</option>`).join('')}
       </select>
     </div>`:''}
     <div class="viaje-body">
@@ -1828,15 +2052,26 @@ function renderViajesAdminList() {
       <div class="parada-row">
         <div class="parada-num" style="${b.estado==='entregada'?'background:var(--gris-cl)':''}">${i+1}</div>
         <div class="parada-info">
-          <div class="parada-cliente" style="${b.estado==='entregada'?'text-decoration:line-through;opacity:.5':''}">${b.cliente}</div>
+          <div class="parada-cliente" style="${b.estado==='entregada'?'text-decoration:line-through;opacity:.5':''}">${b.cliente} ${nroBoleta(b)}</div>
           <div class="parada-dir">${b.direccion}</div>
-          <div class="parada-peso">${b.peso_kg} kg ${b.estado==='entregada'?`<span class="tag tag-verde" style="font-size:18px">Entregado${b.entregada_at?' '+formatTime(b.entregada_at):''}</span>`:''}</div>
+          <div class="parada-peso">${b.peso_kg!=null&&b.peso_kg!==''?b.peso_kg+' kg':''} ${b.estado==='entregada'?`<span class="tag tag-verde" style="font-size:18px">Entregado${b.entregada_at?' '+formatTime(b.entregada_at):''}</span>`:(v.estado==='finalizado'&&b.estado?`<span class="tag tag-amarillo" style="font-size:18px">No entregada · pospuesta</span>`:'')}</div>
         </div>
+        ${(v.estado==='confirmado'||v.estado==='en_curso')&&b.estado!=='entregada'?`
+        <button class="btn btn-secondary btn-sm posponer-activa-btn" data-bid="${b.id}" title="Sacar del viaje y dejar en Boletas pospuestas">Posponer</button>`:''}
       </div>`).join('')}
     </div>
   </div>`).join('');
   document.querySelectorAll('[data-cancelar-viaje]').forEach(btn=>{
     btn.addEventListener('click', () => cancelarViaje(btn.dataset.cancelarViaje));
+  });
+  document.querySelectorAll('.posponer-activa-btn').forEach(btn=>{
+    btn.addEventListener('click', async () => {
+      if (!confirm('¿Sacar esta boleta del viaje? Queda guardada en "Boletas pospuestas" hasta que la agregues a otro viaje.')) return;
+      btn.disabled = true;
+      const r = await api('viajes.php','POST',{action:'quitar_parada', boleta_id:parseInt(btn.dataset.bid)});
+      if (r.success) { toast('✅ '+r.message); await loadViajesAdmin(); refreshPospuestasCount(); }
+      else { toast(r.message||'Error','error'); btn.disabled = false; }
+    });
   });
   document.querySelectorAll('.agregar-parada-sel').forEach(sel=>{
     sel.addEventListener('change', async () => {
@@ -1879,7 +2114,11 @@ async function loadHistorico() {
     return;
   }
   const estadoTag = {confirmado:'<span class="tag tag-amarillo">Confirmado</span>',en_curso:'<span class="tag tag-azul">En curso 🔵</span>',finalizado:'<span class="tag tag-verde">Finalizado ✓</span>'};
-  el.innerHTML = `<div style="display:grid;gap:10px">${r.viajes.map(v => `
+  el.innerHTML = `<div style="display:grid;gap:10px">${r.viajes.map(v => {
+    const boletas = v.boletas || [];
+    const tieneBoletas = boletas.length > 0;
+    const hid = `hist-bols-${v.id}`;
+    return `
     <div class="card">
       <div class="flex gap-3 items-center" style="flex-wrap:wrap;justify-content:space-between">
         <div>
@@ -1888,12 +2127,59 @@ async function loadHistorico() {
             ${estadoTag[v.estado]||v.estado} · 📅 ${v.fecha}
             ${v.started_at?` · ▶ ${formatTime(v.started_at)}`:''}
             ${v.finished_at?` · ✓ ${formatTime(v.finished_at)}`:''}
-            · ${(v.boletas||[]).length} paradas · ${parseFloat(v.peso_total||0).toFixed(0)} kg
+            · ${agruparParadasHistorico(boletas).length} paradas · ${boletas.length} boletas · ${parseFloat(v.peso_total||0).toFixed(0)} kg
           </div>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="eliminarDeHistorico(${v.id})">✕ Eliminar</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${tieneBoletas ? `<button class="btn btn-secondary btn-sm" onclick="document.getElementById('${hid}').style.display=document.getElementById('${hid}').style.display==='none'?'block':'none'">Ver clientes</button>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="eliminarDeHistorico(${v.id})">✕ Eliminar</button>
+        </div>
       </div>
-    </div>`).join('')}</div>`;
+      ${tieneBoletas ? `
+      <div id="${hid}" style="display:none;margin-top:12px;border-top:1px solid var(--borde,#2a2a2a);padding-top:10px">
+        <div style="display:grid;gap:10px">
+          ${agruparParadasHistorico(boletas).map((g,i) => `
+          <div style="font-size:13px">
+            <div style="display:flex;gap:8px;align-items:baseline;font-weight:700">
+              <span style="min-width:20px">${i+1}.</span>
+              <span style="flex:1">${escapeHtmlTracking(g.boletas[0].direccion||'—')}${g.boletas.length>1?` <span class="text-muted" style="font-weight:400">(${g.boletas.length} boletas)</span>`:''}</span>
+            </div>
+            ${g.boletas.map(b => `
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:28px">
+              <span style="flex:1">${escapeHtmlTracking(b.cliente||'—')} ${nroBoleta(b)}</span>
+              <span style="color:var(--verde,#1b7340);white-space:nowrap">${b.entregada_at ? '✓ '+formatTime(b.entregada_at) : (b.estado && b.estado!=='entregada' ? '✗ No entregada' : '')}</span>
+            </div>`).join('')}
+          </div>`).join('')}
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// Une las boletas de una misma dirección (mismas coordenadas ~20 m, o el
+// mismo texto de dirección) en una sola parada. Las paradas se ordenan por
+// la primera hora de entrega real; las que no tienen hora van al final en
+// el orden original.
+function agruparParadasHistorico(boletas) {
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const T = 0.0002;
+  const grupos = [];
+  boletas.forEach(b => {
+    const lat = parseFloat(b.lat), lon = parseFloat(b.lon);
+    const tieneCoords = !isNaN(lat) && !isNaN(lon);
+    const dir = norm(b.direccion);
+    const g = grupos.find(g =>
+      (tieneCoords && g.tieneCoords && Math.abs(g.lat - lat) < T && Math.abs(g.lon - lon) < T) ||
+      (dir && g.dir === dir));
+    if (g) g.boletas.push(b);
+    else grupos.push({ lat, lon, tieneCoords, dir, boletas: [b] });
+  });
+  grupos.forEach(g => {
+    const ts = g.boletas.map(b => b.entregada_at ? new Date(String(b.entregada_at).replace(' ', 'T')).getTime() : NaN).filter(t => !isNaN(t));
+    g.t = ts.length ? Math.min(...ts) : Infinity;
+    g.boletas.sort((a, b) => String(a.entregada_at || '').localeCompare(String(b.entregada_at || '')));
+  });
+  return grupos.map((g, i) => ({ g, i })).sort((a, b) => (a.g.t === b.g.t ? a.i - b.i : a.g.t - b.g.t)).map(x => x.g);
 }
 
 async function eliminarDeHistorico(viaje_id) {
@@ -1970,7 +2256,7 @@ function renderTracking() {
     <h1>📡 Tracking en tiempo real</h1>
     <p>Ubicación de los camiones en ruta ahora mismo.</p>
   </div>
-  <div id="tracking-map" style="height:450px;border-radius:12px;border:1px solid var(--borde);margin-bottom:20px"></div>
+  <div id="tracking-map" style="height:560px;border-radius:12px;border:1px solid var(--borde);margin-bottom:20px"></div>
   <div id="tracking-lista"></div>`;
 }
 
@@ -1982,10 +2268,15 @@ async function loadTracking() {
     center: { lat: -34.60, lng: -58.45 }, zoom: 11, streetViewControl: false,
   });
   trackingMarkers = {};
+  trackingParadaMarkers = {};
+  trackingDestinoMarkers = {};
+  trackingPolylines = {};
+  trackingYaEncuadrado = false;
 
   new google.maps.Marker({
     position: { lat: FABRICA.lat, lng: FABRICA.lon }, map: trackingMapObj,
-    label: { text: '🏭', fontSize: '14px' }, title: 'Fábrica Tres Reyes',
+    label: { text: '🏭', fontSize: '14px' },
+    title: 'Fábrica Tres Reyes',
   });
 
   await refreshTracking();
@@ -1999,100 +2290,238 @@ async function loadTracking() {
 }
 
 let trackingMarkers = {};
-let trackingParadaMarkers = {}; // un marcador numerado por CADA parada pendiente (clave: id de boleta)
+let trackingParadaMarkers = {}; // un marcador PIN por CADA parada pendiente (clave: id de boleta)
 let trackingDestinoMarkers = {}; // marcador del PUNTO DE FINALIZACIÓN de cada viaje (clave: viaje_id)
+let trackingPolylines = {}; // polilínea de ruta por viaje (clave: viaje_id)
+
+// Icono circular (estilo viajes pendientes) para las paradas: círculo
+// relleno con número blanco, igual que el mapa de viajes pendientes.
+function iconoCirculo(color, texto) {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: color, fillOpacity: 1,
+    strokeColor: '#fff', strokeWeight: 2,
+    scale: 14,
+  };
+}
+
+// Icono del camión: círculo más grande con borde más grueso.
+function crearIconoCamion(color) {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: color, fillOpacity: 1,
+    strokeColor: '#fff', strokeWeight: 3,
+    scale: 18,
+  };
+}
+
+// Icono para la fábrica y el destino: círculo gris pequeño con emoji como label.
+function crearIconoPin(color, texto, escala) {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: color, fillOpacity: 1,
+    strokeColor: '#fff', strokeWeight: 2,
+    scale: 13 * (escala || 1),
+  };
+}
+
+let trackingParadasVivas = new Set();
+let trackingYaEncuadrado = false;
+
+function escapeHtmlTracking(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Ajusta el zoom una sola vez para que entren camión, paradas y destino.
+function encuadrarTracking(positions) {
+  const bounds = new google.maps.LatLngBounds();
+  let n = 0;
+  bounds.extend({ lat: FABRICA.lat, lng: FABRICA.lon });
+  positions.forEach(p => {
+    if (p.lat !== null) { bounds.extend({ lat: parseFloat(p.lat), lng: parseFloat(p.lon) }); n++; }
+    (p.paradas || []).forEach(b => { if (b.lat && b.lon) { bounds.extend({ lat: parseFloat(b.lat), lng: parseFloat(b.lon) }); n++; } });
+    if (p.destino_lat && p.destino_lon) { bounds.extend({ lat: parseFloat(p.destino_lat), lng: parseFloat(p.destino_lon) }); n++; }
+  });
+  if (n > 0) { trackingMapObj.fitBounds(bounds, 60); trackingYaEncuadrado = true; }
+}
+
+// Dibuja la ruta del viaje con el trazado por calles que el servidor
+// calculó UNA vez al confirmar el viaje (mismo pedido a Google que
+// optimiza el orden de las paradas), así el tracking no consulta a
+// Google. Si el viaje no tiene trazado guardado (viajes anteriores o
+// con una sola parada), se dibuja una línea recta entre los puntos.
+// La línea se muestra SOLO desde donde está el camión hacia adelante (se
+// recorta el trazado guardado en el punto más cercano al camión, sin
+// consultar a Google). Si el camión se salió del trazado (más de 1,5 km),
+// se pide UN recálculo desde su posición actual, como máximo cada 5 min.
+const trackingRecalcAt = {};
+function actualizarRutaTracking(vid, color, polyline, camion, pendientes, destino) {
+  const prev = trackingPolylines[vid];
+  let sig, base;
+  if (polyline) {
+    sig = 'poly:' + polyline.length + ':' + polyline.slice(0, 40);
+    base = (prev && prev.sig === sig) ? prev.base : decodificarPolyline(polyline);
+  } else {
+    const origen = camion || { lat: FABRICA.lat, lng: FABRICA.lon };
+    const pts = [origen, ...pendientes.map(g => ({ lat: g.lat, lng: g.lon })), ...(destino ? [destino] : [])];
+    if (pts.length < 2) {
+      if (prev) { prev.line.setMap(null); delete trackingPolylines[vid]; }
+      return;
+    }
+    sig = 'rect:' + pts.slice(1).map(q => q.lat.toFixed(5) + ',' + q.lng.toFixed(5)).join('|');
+    base = pts;
+  }
+
+  let path = base, idx = (prev && prev.sig === sig) ? prev.idx : 0;
+  if (polyline && camion) {
+    let best = idx, bestD = Infinity;
+    for (let j = idx; j < base.length; j++) {
+      const d = haversineJS(camion.lat, camion.lng, base[j].lat, base[j].lng);
+      if (d < bestD) { bestD = d; best = j; }
+    }
+    idx = best;
+    path = [camion, ...base.slice(idx)];
+    if (bestD > 1.5 && Date.now() - (trackingRecalcAt[vid] || 0) > 300000) {
+      trackingRecalcAt[vid] = Date.now();
+      api('tracking.php', 'POST', { action: 'recalcular_ruta', viaje_id: parseInt(vid) })
+        .then(r => { if (r && r.success && state.page === 'tracking') refreshTracking(); }).catch(() => {});
+    }
+  }
+
+  const line = prev ? prev.line : new google.maps.Polyline({
+    map: trackingMapObj, strokeColor: color, strokeOpacity: 0.85, strokeWeight: 5, zIndex: 10,
+  });
+  line.setPath(path);
+  trackingPolylines[vid] = { line, sig, base, idx };
+}
+
+// Decodifica el formato "encoded polyline" de Google (precisión 1e5).
+function decodificarPolyline(str) {
+  const out = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    for (const eje of [0, 1]) {
+      let shift = 0, result = 0, b;
+      do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      const d = (result & 1) ? ~(result >> 1) : (result >> 1);
+      if (eje === 0) lat += d; else lng += d;
+    }
+    out.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return out;
+}
 
 async function refreshTracking() {
   const r = await api('tracking.php?action=live');
   const lista = document.getElementById('tracking-lista');
   if (!r.success) return;
+  trackingParadasVivas = new Set();
 
   if (!r.positions.length) {
+    Object.values(trackingMarkers).forEach(m => m.marker.setMap(null));
+    Object.values(trackingDestinoMarkers).forEach(m => m.marker.setMap(null));
+    Object.values(trackingParadaMarkers).forEach(m => m.marker.setMap(null));
+    Object.values(trackingPolylines).forEach(m => m.line.setMap(null));
+    trackingMarkers = {}; trackingDestinoMarkers = {}; trackingParadaMarkers = {}; trackingPolylines = {};
     if (lista) lista.innerHTML = '<div class="card"><p class="text-muted">No hay camiones en ruta ahora mismo.</p></div>';
     return;
   }
 
-  const colors = ['#2ecc71','#3B82F6','#F5C518','#E53E3E'];
+  const colors = ['#1B7340','#3B82F6','#E53E3E','#F5C518'];
 
   r.positions.forEach((p, i) => {
-    const lat = parseFloat(p.lat), lon = parseFloat(p.lon);
+    const lat = p.lat !== null ? parseFloat(p.lat) : null;
+    const lon = p.lon !== null ? parseFloat(p.lon) : null;
     const color = colors[i % colors.length];
-    const popup = `<div style="color:#1a1a1a;font-size:13px"><strong>🚛 ${p.patente}</strong><br>👤 ${p.repartidor}<br>📍 ${p.zona}<br>✅ ${p.entregadas}/${p.total_paradas} entregas<br><small>±${Math.round(p.accuracy||0)}m · ${new Date(p.timestamp).toLocaleTimeString('es-AR')}</small></div>`;
+    const gpsInfo = lat !== null
+      ? `±${Math.round(p.accuracy||0)}m · ${new Date(p.timestamp).toLocaleTimeString('es-AR')}`
+      : '📡 Esperando señal GPS...';
+    const popup = `<div style="color:#1a1a1a;font-size:13px"><strong>🚛 ${p.patente||'Sin patente'}</strong><br>👤 ${p.repartidor}<br>📍 ${p.zona}<br>✅ ${p.entregadas}/${p.total_paradas} entregas<br><small>${gpsInfo}</small></div>`;
 
-    if (trackingMarkers[p.viaje_id]) {
-      // Solo mover el marcador existente (no recrear el mapa: no cuenta
-      // como carga nueva de Google Maps).
-      trackingMarkers[p.viaje_id].marker.setPosition({ lat, lng: lon });
-      trackingMarkers[p.viaje_id].info.setContent(popup);
-    } else {
-      const marker = new google.maps.Marker({
-        position: { lat, lng: lon }, map: trackingMapObj,
-        icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3, scale: 16 },
-        label: { text: '🚛', fontSize: '16px' }, zIndex: 999,
-      });
-      const info = new google.maps.InfoWindow({ content: popup });
-      marker.addListener('click', () => info.open(trackingMapObj, marker));
-      trackingMarkers[p.viaje_id] = { marker, info };
+    if (lat !== null) {
+      if (trackingMarkers[p.viaje_id]) {
+        trackingMarkers[p.viaje_id].marker.setPosition({ lat, lng: lon });
+      } else {
+        const marker = new google.maps.Marker({
+          position: { lat, lng: lon }, map: trackingMapObj,
+          icon: crearIconoCamion(color),
+          label: { text: '🚛', fontSize: '16px' },
+          zIndex: 999, title: `${p.patente||''} — ${p.repartidor}`,
+        });
+        trackingMarkers[p.viaje_id] = { marker };
+      }
     }
 
-    // Todas las paradas PENDIENTES de este camión, numeradas en el orden
-    // real de la ruta (1 = próxima, 2 = siguiente, etc.). Apenas el
-    // repartidor marca una como entregada, deja de venir en "pendientes"
-    // y su marcador se saca del mapa en la limpieza de más abajo.
-    const pendientes = (p.paradas || []).filter(b => b.estado !== 'entregada' && b.lat && b.lon);
-    pendientes.forEach((b, idx) => {
+    // Paradas del viaje: las boletas de una misma dirección (coordenadas
+    // dentro de ~20m) se unifican en UNA sola parada numerada, igual que
+    // al armar la ruta. Se numeran sobre todas las paradas (entregadas o
+    // no) para que el número coincida con la línea de progreso.
+    const grupos = [];
+    const TOLERANCIA = 0.0002;
+    (p.paradas || []).filter(b => b.lat && b.lon).forEach(b => {
+      const glat = parseFloat(b.lat), glon = parseFloat(b.lon);
+      const g = grupos.find(g => Math.abs(g.lat - glat) < TOLERANCIA && Math.abs(g.lon - glon) < TOLERANCIA);
+      if (g) g.boletas.push(b);
+      else grupos.push({ lat: glat, lon: glon, boletas: [b] });
+    });
+    grupos.forEach((g, idx) => {
+      g.hecha = g.boletas.every(b => b.estado === 'entregada');
+      const repId = `grp-${p.viaje_id}-${idx}`;
+      trackingParadasVivas.add(repId);
+      const numLabel = String(idx + 1);
+      const clientesList = g.boletas.map(b => escapeHtmlTracking(b.cliente) + (b.numero_boleta ? ' · N° ' + escapeHtmlTracking(b.numero_boleta) : '')).join('<br>');
+      const cant = g.boletas.length > 1 ? ` <small>(${g.boletas.length} boletas)</small>` : '';
+      const estadoTxt = g.hecha ? '✅ Entregada' : `⏳ Pendiente (${g.boletas.filter(b => b.estado !== 'entregada').length}/${g.boletas.length})`;
+      const infoParada = `<div style="color:#1a1a1a;font-size:13px"><strong>Parada ${numLabel}${cant}</strong><br>${clientesList}<br>${escapeHtmlTracking(g.boletas[0].direccion)}<br><small>${estadoTxt} · Camión ${escapeHtmlTracking(p.patente)}</small></div>`;
+      const icono = iconoCirculo(g.hecha ? '#94a3b8' : color, numLabel);
+      const label = { text: g.hecha ? '✓' : numLabel, color: '#fff', fontWeight: '700', fontSize: '12px' };
       try {
-        // Separación visual: si dos o más puntos caen prácticamente en el
-        // mismo lugar (ej. boletas de prueba cerca de la fábrica, o el
-        // camión parado justo sobre una entrega), Google los dibuja todos
-        // superpuestos y el de más arriba tapa al resto. Acá se los
-        // reparte en un pequeño círculo (unos metros) SOLO para que se
-        // puedan distinguir en el mapa — no cambia la ubicación real
-        // guardada, es puramente para verlos.
-        const anguloDorado = idx * 137.5 * Math.PI / 180;
-        const radio = 0.00007; // ~7-8 metros
-        const bLat = parseFloat(b.lat) + radio * Math.cos(anguloDorado);
-        const bLon = parseFloat(b.lon) + radio * Math.sin(anguloDorado);
-        const infoParada = `<div style="color:#1a1a1a;font-size:13px"><strong>${idx+1}. ${b.cliente}</strong><br>${b.direccion}<br><small>Camión ${p.patente}</small></div>`;
-        if (trackingParadaMarkers[b.id]) {
-          trackingParadaMarkers[b.id].marker.setPosition({ lat: bLat, lng: bLon });
-          trackingParadaMarkers[b.id].marker.setLabel({ text: String(idx+1), color:'#fff', fontWeight:'700', fontSize:'11px' });
-          trackingParadaMarkers[b.id].info.setContent(infoParada);
+        if (trackingParadaMarkers[repId]) {
+          trackingParadaMarkers[repId].marker.setPosition({ lat: g.lat, lng: g.lon });
+          trackingParadaMarkers[repId].marker.setIcon(icono);
+          trackingParadaMarkers[repId].marker.setLabel(label);
+          trackingParadaMarkers[repId].info.setContent(infoParada);
         } else {
           const paradaMarker = new google.maps.Marker({
-            position: { lat: bLat, lng: bLon }, map: trackingMapObj,
-            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 12 },
-            label: { text: String(idx+1), color:'#fff', fontWeight:'700', fontSize:'11px' },
+            position: { lat: g.lat, lng: g.lon }, map: trackingMapObj,
+            icon: icono, label, zIndex: 100 + idx,
+            title: `${numLabel}. ${g.boletas.map(b=>b.cliente).join(', ')}`,
           });
           const infoP = new google.maps.InfoWindow({ content: infoParada });
           paradaMarker.addListener('click', () => infoP.open(trackingMapObj, paradaMarker));
-          trackingParadaMarkers[b.id] = { marker: paradaMarker, info: infoP };
+          trackingParadaMarkers[repId] = { marker: paradaMarker, info: infoP };
         }
       } catch (e) {
-        console.error('[TR Tracking] Error dibujando la parada', b.id, b.cliente, ':', e);
+        console.error('[TR Tracking] Error dibujando grupo', repId, e);
       }
     });
 
-    // Punto de finalización de este viaje (si el admin eligió uno al
-    // confirmar). Se muestra como una banderita gris. Si no eligió
-    // ninguno, no se dibuja nada acá — el viaje termina en la última
-    // entrega, que ya se ve numerada más arriba.
+    // Ruta que le falta recorrer: camión (o fábrica si aún no hay GPS)
+    // → paradas pendientes en orden → punto de finalización.
+    try {
+      const dest = (p.destino_lat && p.destino_lon)
+        ? { lat: parseFloat(p.destino_lat), lng: parseFloat(p.destino_lon) } : null;
+      const camion = lat !== null ? { lat, lng: lon } : null;
+      actualizarRutaTracking(p.viaje_id, color, p.ruta_polyline, camion, grupos.filter(g => !g.hecha), dest);
+    } catch (e) {
+      console.error('[TR Tracking] Error dibujando la ruta del viaje', p.viaje_id, e);
+    }
+
+    // Punto de finalización elegido por el admin (banderita de llegada).
     try {
       if (p.destino_lat && p.destino_lon) {
         const dLat = parseFloat(p.destino_lat), dLon = parseFloat(p.destino_lon);
         const infoDestino = `<div style="color:#1a1a1a;font-size:13px"><strong>🏁 ${p.destino_nombre || 'Punto de finalización'}</strong><br><small>Fin del recorrido de ${p.patente}</small></div>`;
         if (trackingDestinoMarkers[p.viaje_id]) {
           trackingDestinoMarkers[p.viaje_id].marker.setPosition({ lat: dLat, lng: dLon });
-          trackingDestinoMarkers[p.viaje_id].info.setContent(infoDestino);
         } else {
           const destinoMarker = new google.maps.Marker({
             position: { lat: dLat, lng: dLon }, map: trackingMapObj,
-            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#6b7280', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2, scale: 12 },
+            icon: { path: google.maps.SymbolPath.CIRCLE, fillColor:'#6b7280', fillOpacity:1, strokeColor:'#fff', strokeWeight:2, scale:14 },
             label: { text: '🏁', fontSize: '12px' },
+            title: p.destino_nombre || 'Punto de finalización',
           });
-          const infoD = new google.maps.InfoWindow({ content: infoDestino });
-          destinoMarker.addListener('click', () => infoD.open(trackingMapObj, destinoMarker));
-          trackingDestinoMarkers[p.viaje_id] = { marker: destinoMarker, info: infoD };
+          trackingDestinoMarkers[p.viaje_id] = { marker: destinoMarker };
         }
       }
     } catch (e) {
@@ -2100,38 +2529,52 @@ async function refreshTracking() {
     }
   });
 
-  // Sacar del mapa los camiones cuyo viaje ya no está activo (terminó,
-  // se canceló) — antes se quedaban pegados en el mapa para siempre.
-  const activos = new Set(r.positions.map(p => p.viaje_id));
+  // Quitar del mapa los viajes que ya no están activos.
+  // Se comparan como STRING para evitar el bug de tipo: viaje_id llega
+  // del servidor como "288" (string) y Number("288")===288 no coincide
+  // con Set{"288"} — hacía que los marcadores se borraran al instante.
+  const activos = new Set(r.positions.map(p => String(p.viaje_id)));
   Object.keys(trackingMarkers).forEach(vid => {
-    if (!activos.has(Number(vid))) { trackingMarkers[vid].marker.setMap(null); delete trackingMarkers[vid]; }
+    if (!activos.has(vid)) { trackingMarkers[vid].marker.setMap(null); delete trackingMarkers[vid]; }
   });
   Object.keys(trackingDestinoMarkers).forEach(vid => {
-    if (!activos.has(Number(vid))) { trackingDestinoMarkers[vid].marker.setMap(null); delete trackingDestinoMarkers[vid]; }
+    if (!activos.has(vid)) { trackingDestinoMarkers[vid].marker.setMap(null); delete trackingDestinoMarkers[vid]; }
   });
-
-  // Sacar del mapa las paradas que ya no están pendientes: se
-  // entregaron, o su viaje ya no está activo.
-  const pendientesIds = new Set();
-  r.positions.forEach(p => (p.paradas||[]).forEach(b => { if (b.estado !== 'entregada') pendientesIds.add(b.id); }));
-  Object.keys(trackingParadaMarkers).forEach(bid => {
-    if (!pendientesIds.has(Number(bid))) { trackingParadaMarkers[bid].marker.setMap(null); delete trackingParadaMarkers[bid]; }
+  Object.keys(trackingPolylines).forEach(vid => {
+    if (!activos.has(vid)) { trackingPolylines[vid].line.setMap(null); delete trackingPolylines[vid]; }
   });
+  // Quitar las paradas de viajes que ya no están activos o que cambiaron
+  // de agrupación (solo sobreviven las dibujadas en este refresco).
+  Object.keys(trackingParadaMarkers).forEach(k => {
+    if (!trackingParadasVivas.has(k)) { trackingParadaMarkers[k].marker.setMap(null); delete trackingParadaMarkers[k]; }
+  });
+  if (!trackingYaEncuadrado) encuadrarTracking(r.positions);
 
   if (lista) {
-    lista.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
-    ${r.positions.map((p,i)=>`
-    <div class="card">
-      <div class="flex items-center gap-3 mb-4">
-        <div style="width:44px;height:44px;background:${colors[i%colors.length]};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px">🚛</div>
-        <div><div style="font-weight:700">${p.patente}</div><div class="text-sm text-muted">${p.repartidor}</div></div>
-        <span class="tag tag-azul" style="margin-left:auto">En ruta</span>
+    lista.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;margin-top:4px">
+    ${r.positions.map((p,i)=>{
+      const color = colors[i%colors.length];
+      const gpsTs = p.lat !== null
+        ? `Actualizado: ${new Date(p.timestamp).toLocaleTimeString('es-AR')} · GPS vía ${p.fuente==='traccar'?'Traccar':'la web'}`
+        : '📡 Sin señal GPS aún';
+      return `
+    <div class="card" style="padding:18px 20px">
+      <div class="flex items-center gap-3 mb-3">
+        <div style="width:44px;height:44px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🚛</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:16px">${p.patente||'Sin patente'}</div>
+          <div class="text-sm text-muted">${p.repartidor}</div>
+        </div>
+        <span class="tag tag-azul" style="flex-shrink:0">En ruta</span>
       </div>
-      <div class="text-sm"><b>Zona:</b> ${p.zona||'-'}</div>
-      <div class="text-sm mt-2 mb-2"><b>Entregas:</b> ${p.entregadas} / ${p.total_paradas}</div>
+      <div style="display:flex;gap:16px;margin-bottom:10px">
+        <div class="text-sm"><span class="text-muted">Zona:</span> <b>${p.zona||'-'}</b></div>
+        <div class="text-sm"><span class="text-muted">Entregas:</span> <b>${p.entregadas} / ${p.total_paradas}</b></div>
+      </div>
       ${renderLineaParadas(p.paradas||[])}
-      <div class="text-sm text-muted mt-2">Actualizado: ${new Date(p.timestamp).toLocaleTimeString('es-AR')}</div>
-    </div>`).join('')}
+      <div class="text-sm text-muted" style="margin-top:8px">${gpsTs}</div>
+    </div>`;
+    }).join('')}
     </div>`;
   }
 }
@@ -2253,7 +2696,6 @@ function renderConfig() {
   <div class="section-tabs mb-4">
     <button class="tab-btn active" data-tab="repartidores">👤 Repartidores</button>
     <button class="tab-btn" data-tab="camiones">🚛 Camiones</button>
-    <button class="tab-btn" data-tab="destinos">📍 Destinos</button>
     <button class="tab-btn" data-tab="sistema">🔧 Sistema</button>
   </div>
   <div id="config-tab-content"><div class="loading"><div class="spinner"></div> Cargando...</div></div>`;
@@ -2269,10 +2711,8 @@ function bindConfig() {
 }
 async function loadConfig() {
   const r = await api('repartidores.php');
-  const destR = await api('config_api.php','POST',{action:'listar_destinos'});
   if (r.success) {
     state.repartidores=r.repartidores; state.camiones=r.camiones;
-    state.destinos = (destR.success && destR.destinos) ? destR.destinos : [];
     renderConfigTab('repartidores');
   }
 }
@@ -2295,6 +2735,16 @@ function renderConfigTab(tab) {
         <div class="form-group"><label>Contraseña</label><input type="password" id="nr-pass" placeholder="••••••" /></div>
       </div>
       <p class="text-sm text-muted mb-4">El camión no se asigna acá: se elige cada vez que se confirma un viaje, en "Viajes pendientes".</p>
+      <p class="text-sm text-muted mb-2" style="font-weight:600">Domicilio particular (opcional)</p>
+      <p class="text-sm text-muted mb-4">Si lo cargás, al confirmar un viaje vas a poder elegir "Casa de [nombre]" como punto de finalización de la ruta.</p>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Calle</label><input type="text" id="nr-dest-calle" placeholder="Av. San Martín" /></div>
+        <div class="form-group"><label>Altura</label><input type="text" id="nr-dest-altura" placeholder="1234" /></div>
+      </div>
+      <div class="form-row mb-4">
+        <div class="form-group"><label>Localidad</label><input type="text" id="nr-dest-localidad" placeholder="San Miguel" /></div>
+        <div class="form-group"><label>Código postal</label><input type="text" id="nr-dest-cp" placeholder="B1663" /></div>
+      </div>
       <div class="flex gap-2">
         <button class="btn btn-primary" id="guardar-rep-btn">Guardar</button>
         <button class="btn btn-secondary" id="cancelar-rep-btn">Cancelar</button>
@@ -2307,7 +2757,7 @@ function renderConfigTab(tab) {
           <div style="width:44px;height:44px;border-radius:50%;background:var(--verde);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700">${(r.nombre||'?')[0]}</div>
           <div style="flex:1">
             <div style="font-weight:700">${r.nombre}</div>
-            <div class="text-sm text-muted">${r.email || '@'+r.usuario}</div>
+            <div class="text-sm text-muted">${r.email || '@'+r.usuario} · ID para Traccar: <b>${r.id}</b></div>
             <div class="text-sm mt-2">🚛 ${r.patente?`${r.patente} — ${r.marca||''} ${r.modelo||''}`:'<span class="text-muted">Sin camión</span>'}</div>
           </div>
           <span class="tag ${r.viajes_activos>0?'tag-azul':'tag-verde'}">${r.viajes_activos>0?'🔵 En viaje':'✅ Disponible'}</span>
@@ -2326,6 +2776,15 @@ function renderConfigTab(tab) {
               ${state.camiones.map(c=>`<option value="${c.id}" ${String(c.id)===String(r.camion_id)?'selected':''}>${c.patente} — ${c.marca||''} ${c.modelo||''}</option>`).join('')}
               </select>
             </div>
+          </div>
+          <p class="text-sm text-muted mb-2" style="font-weight:600">Domicilio particular ${r.dest_lat?'<span class="tag tag-verde" style="font-size:11px">✓ Ubicado</span>':'<span class="tag tag-gris" style="font-size:11px">Sin ubicar</span>'}</p>
+          <div class="form-row mb-4">
+            <div class="form-group"><label>Calle</label><input type="text" id="er-dest-calle-${r.id}" value="${r.dest_calle||''}" placeholder="Av. San Martín" /></div>
+            <div class="form-group"><label>Altura</label><input type="text" id="er-dest-altura-${r.id}" value="${r.dest_altura||''}" placeholder="1234" /></div>
+          </div>
+          <div class="form-row mb-4">
+            <div class="form-group"><label>Localidad</label><input type="text" id="er-dest-localidad-${r.id}" value="${r.dest_localidad||''}" placeholder="San Miguel" /></div>
+            <div class="form-group"><label>Código postal</label><input type="text" id="er-dest-cp-${r.id}" value="${r.dest_cp||''}" placeholder="B1663" /></div>
           </div>
           <div class="flex gap-2">
             <button class="btn btn-primary btn-sm" data-guardar-edit-rep="${r.id}">Guardar cambios</button>
@@ -2432,86 +2891,6 @@ function renderConfigTab(tab) {
       btn.addEventListener('click',()=>eliminarCamion(btn.dataset.delCam));
     });
   }
-  if (tab==='destinos') {
-    el.innerHTML=`
-    <div class="flex gap-3 mb-4" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
-      <h2 style="font-size:18px;font-weight:700">Puntos de finalización</h2>
-      <button class="btn btn-primary btn-sm" id="nuevo-dest-btn">+ Nuevo punto</button>
-    </div>
-    <p class="text-sm text-muted mb-4">Además de la cochera de siempre, acá podés cargar otros lugares donde a veces terminan los camiones. Las rutas siempre salen de la fábrica y terminan en el punto que elijas al confirmar cada viaje.</p>
-    <div id="nuevo-dest-form" style="display:none" class="card mb-4">
-      <h3 class="mb-4" style="font-size:15px">Nuevo punto de finalización</h3>
-      <div class="form-row mb-4">
-        <div class="form-group"><label>Nombre</label><input type="text" id="nd-nombre" placeholder="Depósito Norte" /></div>
-        <div class="form-group"><label>Calle</label><input type="text" id="nd-calle" placeholder="Av. Rivadavia" /></div>
-      </div>
-      <div class="form-row mb-4">
-        <div class="form-group"><label>Altura</label><input type="text" id="nd-altura" placeholder="4500" /></div>
-        <div class="form-group"><label>Localidad</label><input type="text" id="nd-localidad" placeholder="San Miguel" /></div>
-      </div>
-      <div class="form-row mb-4">
-        <div class="form-group"><label>Provincia</label><input type="text" id="nd-provincia" placeholder="Buenos Aires" /></div>
-        <div class="form-group"><label>Código postal (opcional)</label><input type="text" id="nd-cp" placeholder="B1663" /></div>
-      </div>
-      <div class="flex gap-2">
-        <button class="btn btn-primary" id="guardar-dest-btn">Guardar</button>
-        <button class="btn btn-secondary" id="cancelar-dest-btn">Cancelar</button>
-      </div>
-    </div>
-    <div style="display:grid;gap:12px">${(state.destinos||[]).map(d=>`
-    <div class="card" id="dest-card-${d.id}">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div style="font-size:32px">📍</div>
-        <div style="flex:1">
-          <div style="font-weight:700">${d.nombre}</div>
-          <div class="text-sm text-muted">${d.calle} ${d.altura}, ${d.localidad}, ${d.provincia}${d.cp?' ('+d.cp+')':''}</div>
-        </div>
-        <span class="tag ${d.lat?'tag-verde':'tag-amarillo'}">${d.lat?'✓ Ubicado':'⚠️ Sin ubicar'}</span>
-        <button class="btn btn-secondary btn-sm" data-edit-dest="${d.id}">✏️ Editar</button>
-        <button class="btn btn-danger btn-sm" data-del-dest="${d.id}">🗑 Eliminar</button>
-      </div>
-      <div id="edit-dest-form-${d.id}" style="display:none;margin-top:16px;border-top:1px solid #2E2E2E;padding-top:16px">
-        <div class="form-row mb-4">
-          <div class="form-group"><label>Nombre</label><input type="text" id="ed-nombre-${d.id}" value="${d.nombre||''}" /></div>
-          <div class="form-group"><label>Calle</label><input type="text" id="ed-calle-${d.id}" value="${d.calle||''}" /></div>
-        </div>
-        <div class="form-row mb-4">
-          <div class="form-group"><label>Altura</label><input type="text" id="ed-altura-${d.id}" value="${d.altura||''}" /></div>
-          <div class="form-group"><label>Localidad</label><input type="text" id="ed-localidad-${d.id}" value="${d.localidad||''}" /></div>
-        </div>
-        <div class="form-row mb-4">
-          <div class="form-group"><label>Provincia</label><input type="text" id="ed-provincia-${d.id}" value="${d.provincia||''}" /></div>
-          <div class="form-group"><label>Código postal</label><input type="text" id="ed-cp-${d.id}" value="${d.cp||''}" /></div>
-        </div>
-        <div class="flex gap-2">
-          <button class="btn btn-primary btn-sm" data-guardar-edit-dest="${d.id}">Guardar cambios</button>
-          <button class="btn btn-secondary btn-sm" data-cancelar-edit-dest="${d.id}">Cancelar</button>
-        </div>
-      </div>
-    </div>`).join('')||'<div class="card"><p class="text-muted">Todavía no cargaste ningún punto de finalización — las rutas van a terminar en la cochera de siempre.</p></div>'}</div>`;
-
-    document.getElementById('nuevo-dest-btn')?.addEventListener('click',()=>document.getElementById('nuevo-dest-form').style.display='block');
-    document.getElementById('cancelar-dest-btn')?.addEventListener('click',()=>document.getElementById('nuevo-dest-form').style.display='none');
-    document.getElementById('guardar-dest-btn')?.addEventListener('click', guardarNuevoDestino);
-    document.querySelectorAll('[data-edit-dest]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        const f=document.getElementById(`edit-dest-form-${btn.dataset.editDest}`);
-        if(f) f.style.display = f.style.display==='none' ? 'block' : 'none';
-      });
-    });
-    document.querySelectorAll('[data-cancelar-edit-dest]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        const f=document.getElementById(`edit-dest-form-${btn.dataset.cancelarEditDest}`);
-        if(f) f.style.display='none';
-      });
-    });
-    document.querySelectorAll('[data-guardar-edit-dest]').forEach(btn=>{
-      btn.addEventListener('click',()=>guardarEditDestino(btn.dataset.guardarEditDest));
-    });
-    document.querySelectorAll('[data-del-dest]').forEach(btn=>{
-      btn.addEventListener('click',()=>eliminarDestino(btn.dataset.delDest));
-    });
-  }
   if (tab==='sistema') {
     const conf=JSON.parse(localStorage.getItem('tr_config')||'{}');
     el.innerHTML=`<div style="display:grid;gap:16px;max-width:600px">
@@ -2521,12 +2900,24 @@ function renderConfigTab(tab) {
     <div class="card"><h3 style="font-size:15px;font-weight:700;margin-bottom:16px">🎨 Apariencia</h3>
       <div class="form-group mb-4"><label>Nombre de la empresa</label><input type="text" id="conf-empresa" value="${conf.empresa||'Tres Reyes'}" /></div>
       <button class="btn btn-primary btn-sm" id="guardar-apariencia">Guardar</button></div>
+    <div class="card" style="border-left:3px solid var(--rojo)">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:8px">⚠️ Zona de peligro</h3>
+      <p class="text-sm text-muted mb-4">Borra absolutamente todas las boletas y viajes del sistema, de cualquier fecha. No se puede deshacer.</p>
+      <button class="btn btn-danger btn-sm" id="borrar-todo-btn">🗑️ Borrar TODO (todas las fechas, sin excepción)</button>
+    </div>
     </div>`;
     document.getElementById('guardar-fabrica')?.addEventListener('click',()=>saveConf('fabrica',document.getElementById('conf-fabrica').value));
     document.getElementById('guardar-apariencia')?.addEventListener('click',()=>{
       saveConf('empresa',document.getElementById('conf-empresa').value);
       const logo=document.querySelector('.sidebar-logo h2');
       if(logo)logo.textContent=document.getElementById('conf-empresa').value;
+    });
+    document.getElementById('borrar-todo-btn')?.addEventListener('click', async () => {
+      if (!confirm('¿BORRAR TODO? Esto elimina absolutamente todas las boletas y viajes del sistema, de cualquier fecha (incluidas las ya entregadas). No hay forma de deshacerlo. ¿Continuar?')) return;
+      if (!confirm('Última confirmación: se va a borrar TODO el historial de boletas y viajes. ¿Estás seguro?')) return;
+      const r = await api('boletas.php', 'POST', { action: 'borrar_todo' });
+      if (r.success) toast('✅ ' + r.message);
+      else toast(r.message || 'No se pudo borrar', 'error');
     });
   }
 }
@@ -2536,7 +2927,11 @@ async function guardarNuevoRep(){
   const email=document.getElementById('nr-email').value.trim();
   const pass=document.getElementById('nr-pass').value;
   if(!nombre||!email||!pass){toast('Completá nombre, email y contraseña','error');return;}
-  const r=await api('config_api.php','POST',{action:'nuevo_repartidor',nombre,email,password:pass});
+  const dest_calle=document.getElementById('nr-dest-calle')?.value.trim()||'';
+  const dest_altura=document.getElementById('nr-dest-altura')?.value.trim()||'';
+  const dest_localidad=document.getElementById('nr-dest-localidad')?.value.trim()||'';
+  const dest_cp=document.getElementById('nr-dest-cp')?.value.trim()||'';
+  const r=await api('config_api.php','POST',{action:'nuevo_repartidor',nombre,email,password:pass,dest_calle,dest_altura,dest_localidad,dest_cp});
   if(r.success){toast('✅ Repartidor creado');document.getElementById('nuevo-rep-form').style.display='none';await loadConfig();}
   else toast(r.message||'Error','error');
 }
@@ -2550,7 +2945,17 @@ async function guardarEditRep(id){
   const email=document.getElementById(`er-email-${id}`).value.trim();
   const password=document.getElementById(`er-pass-${id}`).value;
   const camion=document.getElementById(`er-camion-${id}`).value;
-  const r=await api('config_api.php','POST',{action:'editar_repartidor',id,nombre,email,password,camion_id:camion||null});
+  const dest_calle=document.getElementById(`er-dest-calle-${id}`)?.value.trim()||undefined;
+  const dest_altura=document.getElementById(`er-dest-altura-${id}`)?.value.trim()||'';
+  const dest_localidad=document.getElementById(`er-dest-localidad-${id}`)?.value.trim()||undefined;
+  const dest_cp=document.getElementById(`er-dest-cp-${id}`)?.value.trim()||'';
+  const payload={action:'editar_repartidor',id,nombre,email,password,camion_id:camion||null};
+  // Solo enviar domicilio si se cambió calle o localidad
+  if(dest_calle!==undefined||dest_localidad!==undefined){
+    payload.dest_calle=dest_calle||''; payload.dest_altura=dest_altura;
+    payload.dest_localidad=dest_localidad||''; payload.dest_cp=dest_cp;
+  }
+  const r=await api('config_api.php','POST',payload);
   if(r.success){toast('✅ Repartidor actualizado');await loadConfig();}
   else toast(r.message||'Error','error');
 }
@@ -2683,16 +3088,16 @@ async function loadViajesRep() {
   <div class="viaje-rep-card">
     <div class="viaje-rep-header">
       <div><div style="font-weight:700">🚛 ${v.patente||'Camión'} · ${v.zona?('Zona '+v.zona):''}</div>
-      <div class="text-sm text-muted">${(v.boletas||[]).length} paradas · ${v.peso_total} kg</div></div>
+      <div class="text-sm text-muted">${cantParadas(v.boletas)} paradas · ${(v.boletas||[]).length} boletas · ${v.peso_total} kg</div></div>
       <span class="tag" style="background:${estadoColor[v.estado]||'#333'};color:#fff">${v.estado==='confirmado'?'Listo para salir':v.estado==='en_curso'?'En curso':v.estado==='finalizado'?'Finalizado':'—'}</span>
     </div>
     ${(v.boletas||[]).map((b,j)=>`
     <div class="parada-rep ${b.estado==='entregada'?'entregada':''}" id="parada-${b.id}">
-      <button class="check-btn ${b.estado==='entregada'?'done':''}" data-bid="${b.id}">${b.estado==='entregada'?'✓':''}</button>
+      <button class="check-btn ${b.estado==='entregada'?'done':''}" data-bid="${b.id}" ${v.estado!=='en_curso'&&b.estado!=='entregada'?'data-bloqueado="1" style="opacity:.4"':''}>${b.estado==='entregada'?'✓':''}</button>
       <div class="parada-info">
-        <div class="parada-cliente">${j+1}. ${b.cliente}</div>
+        <div class="parada-cliente">${j+1}. ${b.cliente} ${nroBoleta(b)}</div>
         <div class="parada-dir">${b.direccion} ${!(b.lat&&b.lon)?'<span class="tag tag-amarillo" style="font-size:11px">⚠️ Sin ubicación — no aparece en el mapa</span>':''}</div>
-        <div class="parada-peso">${b.peso_kg} kg ${b.estado==='entregada'&&b.entregada_at?`<span class="text-muted">· ✓ ${formatTime(b.entregada_at)}</span>`:''}</div>
+        <div class="parada-peso">${b.peso_kg!=null&&b.peso_kg!==''?b.peso_kg+' kg':''} ${b.estado==='entregada'&&b.entregada_at?`<span class="text-muted">· ✓ ${formatTime(b.entregada_at)}</span>`:''}</div>
       </div>
     </div>`).join('')}
     <div style="padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap">
@@ -2711,7 +3116,7 @@ async function loadViajesRep() {
       <div class="card">
         <div style="font-weight:700">🚛 ${v.patente||'Camión'} · ${v.zona?('Zona '+v.zona):''}</div>
         <div class="text-sm text-muted mt-2">
-          ${(v.boletas||[]).length} paradas · ${v.peso_total} kg
+          ${cantParadas(v.boletas)} paradas · ${(v.boletas||[]).length} boletas · ${v.peso_total} kg
           ${v.started_at?` · ▶ ${formatTime(v.started_at)}`:''}
           ${v.finished_at?` · ✓ ${formatTime(v.finished_at)}`:''}
         </div>
@@ -2719,7 +3124,15 @@ async function loadViajesRep() {
   `;
   document.querySelectorAll('.check-btn').forEach(btn=>{
     btn.addEventListener('click',async()=>{
-      await api('viajes.php','POST',{action:'entregar_parada',boleta_id:parseInt(btn.dataset.bid)});
+      if (btn.dataset.bloqueado) { toast('Primero tocá "▶ Iniciar viaje" para poder marcar entregas', 'error'); return; }
+      const bid = parseInt(btn.dataset.bid);
+      const rr = await api('viajes.php','POST',{action:'entregar_parada',boleta_id:bid});
+      if (!rr.success) { toast(rr.message || 'No se pudo marcar la entrega', 'error'); return; }
+      // Reflejarlo en el estado local: así "Abrir ruta en Google Maps" ya
+      // no incluye esta parada sin necesidad de recargar la lista.
+      (state.viajesRep||[]).forEach(vj => (vj.boletas||[]).forEach(bo => {
+        if (bo.id == bid) { bo.estado = 'entregada'; bo.entregada_at = new Date().toISOString(); }
+      }));
       btn.classList.add('done');btn.textContent='✓';btn.closest('.parada-rep').classList.add('entregada');
       // Mostrar la hora de entrega al toque, sin recargar
       const pesoEl = btn.closest('.parada-rep').querySelector('.parada-peso');

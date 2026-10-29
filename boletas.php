@@ -31,7 +31,7 @@ if ($method === 'GET') {
         FROM boletas b
         LEFT JOIN viajes v ON v.id = b.viaje_id
         WHERE b.fecha_carga = ?
-          AND (v.estado IS NULL OR v.estado NOT IN ("confirmado","en_curso","finalizado"))
+          AND (v.estado IS NULL OR v.estado NOT IN ("confirmado","en_curso"))
         ORDER BY b.id DESC
     ');
     $stmt->bind_param('s', $fecha);
@@ -44,6 +44,7 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $input = getInput();
     $action = $input['action'] ?? 'crear';
+    if ($action === 'crear' || $action === 'bulk') asegurarColumnaNumeroBoleta($db);
 
     if ($action === 'crear') {
         $fecha    = $input['fecha']    ?? date('Y-m-d');
@@ -56,13 +57,15 @@ if ($method === 'POST') {
         $notas    = trim($input['notas']   ?? '');
         $lat      = $input['lat'] ? floatval($input['lat']) : null;
         $lon      = $input['lon'] ? floatval($input['lon']) : null;
+        $numero   = substr(trim($input['numero_boleta'] ?? ''), 0, 20);
+        if ($numero === '') $numero = null;
 
         if (!$cliente || !$direccion || $peso <= 0) {
             jsonResponse(['success'=>false,'message'=>'Cliente, dirección y peso son requeridos']);
         }
 
-        $stmt = $db->prepare('INSERT INTO boletas (fecha_carga, cliente, direccion, barrio, cp, zona, lat, lon, peso_kg, notas) VALUES (?,?,?,?,?,?,?,?,?,?)');
-        $stmt->bind_param('ssssssddds', $fecha, $cliente, $direccion, $barrio, $cp, $zona, $lat, $lon, $peso, $notas);
+        $stmt = $db->prepare('INSERT INTO boletas (fecha_carga, cliente, direccion, barrio, cp, zona, lat, lon, peso_kg, notas, numero_boleta) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+        $stmt->bind_param('ssssssdddss', $fecha, $cliente, $direccion, $barrio, $cp, $zona, $lat, $lon, $peso, $notas, $numero);
         $stmt->execute();
         $id = $db->insert_id;
 
@@ -94,8 +97,10 @@ if ($method === 'POST') {
             // Usar coordenadas del PDF si están disponibles
             $lat_b = isset($b['lat']) && $b['lat'] ? floatval($b['lat']) : $lat;
             $lon_b = isset($b['lon']) && $b['lon'] ? floatval($b['lon']) : $lon;
-            $stmt = $db->prepare('INSERT INTO boletas (fecha_carga, cliente, direccion, barrio, cp, zona, lat, lon, peso_kg, notas) VALUES (?,?,?,?,?,?,?,?,?,?)');
-            $stmt->bind_param('ssssssddds', $fecha, $cliente, $direccion, $barrio, $cp, $zona, $lat_b, $lon_b, $peso, $notas);
+            $numero = substr(trim($b['numero_boleta'] ?? ''), 0, 20);
+            if ($numero === '') $numero = null;
+            $stmt = $db->prepare('INSERT INTO boletas (fecha_carga, cliente, direccion, barrio, cp, zona, lat, lon, peso_kg, notas, numero_boleta) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+            $stmt->bind_param('ssssssdddss', $fecha, $cliente, $direccion, $barrio, $cp, $zona, $lat_b, $lon_b, $peso, $notas, $numero);
             $stmt->execute();
             $inserted++;
         }
@@ -146,17 +151,20 @@ if ($method === 'POST') {
         $direccion = trim($input['direccion'] ?? $b['direccion']);
         $barrio    = trim($input['barrio'] ?? $b['barrio']);
         $zona      = trim($input['zona'] ?? $b['zona']);
+        $cp        = trim($input['cp'] ?? ($b['cp'] ?? ''));
 
-        $cambioUbicacion = ($direccion !== $b['direccion']) || ($barrio !== ($b['barrio'] ?? ''));
+        $cambioUbicacion = ($direccion !== $b['direccion'])
+                        || ($barrio !== ($b['barrio'] ?? ''))
+                        || ($cp !== ($b['cp'] ?? ''));
         $cambioZona = ($zona !== ($b['zona'] ?? ''));
 
         if ($cambioUbicacion) {
             // Borra coordenadas: quedará "Sin GPS" hasta re-geocodificar.
-            $stmt = $db->prepare('UPDATE boletas SET direccion=?, barrio=?, zona=?, lat=NULL, lon=NULL, geo_aproximada=0 WHERE id=?');
-            $stmt->bind_param('sssi', $direccion, $barrio, $zona, $id);
+            $stmt = $db->prepare('UPDATE boletas SET direccion=?, barrio=?, zona=?, cp=?, lat=NULL, lon=NULL, geo_aproximada=0 WHERE id=?');
+            $stmt->bind_param('ssssi', $direccion, $barrio, $zona, $cp, $id);
         } else {
-            $stmt = $db->prepare('UPDATE boletas SET direccion=?, barrio=?, zona=? WHERE id=?');
-            $stmt->bind_param('sssi', $direccion, $barrio, $zona, $id);
+            $stmt = $db->prepare('UPDATE boletas SET direccion=?, barrio=?, zona=?, cp=? WHERE id=?');
+            $stmt->bind_param('ssssi', $direccion, $barrio, $zona, $cp, $id);
         }
         $stmt->execute();
 
@@ -311,9 +319,7 @@ if ($method === 'DELETE') {
     $b = $db->query("SELECT * FROM boletas WHERE id=$id")->fetch_assoc();
     if (!$b) jsonResponse(['success'=>false,'message'=>'Boleta no encontrada']);
 
-    if ($b['estado'] === 'entregada') {
-        jsonResponse(['success'=>false,'message'=>'Esta boleta ya fue entregada, no se puede borrar']);
-    }
+    // El admin puede borrar cualquier boleta, incluso entregadas (para limpiar pruebas).
 
     $viaje_id = $b['viaje_id'] ? intval($b['viaje_id']) : null;
     $viaje = $viaje_id ? $db->query("SELECT * FROM viajes WHERE id=$viaje_id")->fetch_assoc() : null;

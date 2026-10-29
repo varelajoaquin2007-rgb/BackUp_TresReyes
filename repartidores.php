@@ -9,6 +9,8 @@ liberarCamionesTrabados($db);
 $res = $db->query('
     SELECT r.id, r.camion_id, u.nombre, u.usuario, u.email,
            c.patente, c.modelo, c.estado as camion_estado,
+           r.dest_calle, r.dest_altura, r.dest_localidad, r.dest_provincia, r.dest_cp,
+           r.dest_lat, r.dest_lon,
            (SELECT COUNT(*) FROM viajes v WHERE v.repartidor_id = r.id AND v.estado IN ("confirmado","en_curso")) as viajes_activos
     FROM repartidores r
     JOIN usuarios u ON u.id = r.usuario_id

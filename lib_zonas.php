@@ -193,15 +193,103 @@ function obtenerViajeConBoletas($db, $viaje_id) {
     $v['destino_lat'] = null;
     $v['destino_lon'] = null;
     $v['destino_nombre'] = null;
-    if (!empty($v['destino_id'])) {
+    // Nuevo sistema: destino_final_* guardado directamente en el viaje
+    // (desde migracion_destino_repartidor.sql). Tiene prioridad sobre
+    // el viejo destino_id → puntos_finalizacion.
+    if (!empty($v['destino_final_lat'])) {
+        $v['destino_lat']    = floatval($v['destino_final_lat']);
+        $v['destino_lon']    = floatval($v['destino_final_lon']);
+        $v['destino_nombre'] = $v['destino_final_nombre'] ?? 'Destino';
+    } elseif (!empty($v['destino_id'])) {
+        // Retrocompat: viajes viejos que guardaban el id de puntos_finalizacion
         $dp = $db->query("SELECT nombre, lat, lon FROM puntos_finalizacion WHERE id=".intval($v['destino_id']))->fetch_assoc();
         if ($dp && $dp['lat'] !== null) {
-            $v['destino_lat'] = floatval($dp['lat']);
-            $v['destino_lon'] = floatval($dp['lon']);
+            $v['destino_lat']    = floatval($dp['lat']);
+            $v['destino_lon']    = floatval($dp['lon']);
             $v['destino_nombre'] = $dp['nombre'];
         }
     }
     return $v;
+}
+
+// Crea la columna donde se guarda el trazado por calles del viaje, si
+// todavía no existe (mismo estilo de auto-migración que recuperar.php).
+function asegurarColumnaRuta($db) {
+    $r = $db->query("SHOW COLUMNS FROM viajes LIKE 'ruta_polyline'");
+    if ($r && $r->num_rows === 0) $db->query("ALTER TABLE viajes ADD COLUMN ruta_polyline MEDIUMTEXT NULL");
+    asegurarColumnaNumeroBoleta($db);
+}
+
+// Columnas de apoyo al tracking: de dónde vino cada posición (web o
+// traccar) y cuándo se recalculó por última vez la ruta de un viaje.
+// Guarda solo la última posición de cada viaje (una fila por viaje): si ya
+// hay una la pisa, y borra cualquier fila vieja que hubiera quedado.
+function guardarUltimaPosicion($db, $viaje_id, $repartidor_id, $lat, $lon, $accuracy, $fuente) {
+    $st = $db->prepare('SELECT MAX(id) AS id FROM posiciones WHERE viaje_id=?');
+    $st->bind_param('i', $viaje_id); $st->execute();
+    $id = intval($st->get_result()->fetch_assoc()['id'] ?? 0);
+    if ($id) {
+        $st = $db->prepare('UPDATE posiciones SET repartidor_id=?, lat=?, lon=?, accuracy=?, fuente=?, timestamp=NOW() WHERE id=?');
+        $st->bind_param('idddsi', $repartidor_id, $lat, $lon, $accuracy, $fuente, $id);
+        $st->execute();
+        $db->query("DELETE FROM posiciones WHERE viaje_id=$viaje_id AND id<>$id");
+    } else {
+        $st = $db->prepare('INSERT INTO posiciones (viaje_id, repartidor_id, lat, lon, accuracy, fuente) VALUES (?,?,?,?,?,?)');
+        $st->bind_param('iiddds', $viaje_id, $repartidor_id, $lat, $lon, $accuracy, $fuente);
+        $st->execute();
+    }
+}
+
+function asegurarColumnasTracking($db) {
+    $r = $db->query("SHOW COLUMNS FROM posiciones LIKE 'fuente'");
+    if ($r && $r->num_rows === 0) $db->query("ALTER TABLE posiciones ADD COLUMN fuente VARCHAR(10) NOT NULL DEFAULT 'web'");
+    $r = $db->query("SHOW COLUMNS FROM viajes LIKE 'ruta_calc_at'");
+    if ($r && $r->num_rows === 0) $db->query("ALTER TABLE viajes ADD COLUMN ruta_calc_at DATETIME NULL");
+}
+
+/**
+ * Trazado por calles desde un origen, pasando por las paradas indicadas
+ * (en el orden dado, sin reoptimizar) hasta el destino (o la última
+ * parada si no hay destino). $paradas: [[lat, lon], ...].
+ * Devuelve el polyline codificado o null.
+ */
+function calcularPolylineRuta($oLat, $oLon, $paradas, $dLat = null, $dLon = null) {
+    $pt = fn($la, $lo) => ['location' => ['latLng' => ['latitude' => floatval($la), 'longitude' => floatval($lo)]]];
+    $pts = $paradas;
+    if ($dLat !== null && $dLon !== null) $pts[] = [$dLat, $dLon];
+    if (!$pts || count($pts) > 26) return null;
+    $ult = array_pop($pts);
+    $body = ['origin' => $pt($oLat, $oLon), 'destination' => $pt($ult[0], $ult[1]), 'travelMode' => 'DRIVE'];
+    if ($pts) $body['intermediates'] = array_map(fn($q) => $pt($q[0], $q[1]), $pts);
+
+    $ch = curl_init('https://routes.googleapis.com/directions/v2:computeRoutes');
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'X-Goog-Api-Key: ' . GOOGLE_ROUTES_KEY,
+        'X-Goog-FieldMask: routes.polyline.encodedPolyline',
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $code !== 200) return null;
+    $d = json_decode($resp, true);
+    return $d['routes'][0]['polyline']['encodedPolyline'] ?? null;
+}
+
+// Número de comprobante de la boleta (ej. 0006-00002396), leído del PDF.
+function asegurarColumnaNumeroBoleta($db) {
+    $r = $db->query("SHOW COLUMNS FROM boletas LIKE 'numero_boleta'");
+    if ($r && $r->num_rows === 0) $db->query("ALTER TABLE boletas ADD COLUMN numero_boleta VARCHAR(20) NULL");
+}
+
+function guardarRutaViaje($db, $viaje_id, $polyline) {
+    $st = $db->prepare('UPDATE viajes SET ruta_polyline=? WHERE id=?');
+    $st->bind_param('si', $polyline, $viaje_id);
+    $st->execute();
 }
 
 // Libera camiones que quedaron marcados "en_viaje" sin tener en
@@ -214,7 +302,8 @@ function liberarCamionesTrabados($db) {
         SET estado='disponible'
         WHERE estado='en_viaje'
           AND id NOT IN (
-              SELECT COALESCE(camion_id,0) FROM viajes WHERE estado IN ('confirmado','en_curso')
+              SELECT COALESCE(camion_id,0) FROM viajes
+              WHERE estado = 'en_curso' OR (estado = 'confirmado' AND fecha <= CURDATE())
           )
     ");
 }
@@ -300,11 +389,14 @@ function buscarGoogleGeocoding($query, $bounds = null) {
  * destino es la última entrega (todas las demás quedan de intermedias).
  * Devuelve un array de ids en el orden óptimo, o null si no se pudo.
  */
-function optimizarOrdenRuta($boletas, $origenLat = null, $origenLon = null, $destinoLat = null, $destinoLon = null) {
+function optimizarOrdenRuta($boletas, $origenLat = null, $origenLon = null, $destinoLat = null, $destinoLon = null, &$polylineOut = null) {
+    $polylineOut = null;
     $conCoords = array_values(array_filter($boletas, fn($b) => $b['lat'] !== null && $b['lon'] !== null));
     $sinCoords = array_values(array_filter($boletas, fn($b) => $b['lat'] === null || $b['lon'] === null));
-    // Con 0 o 1 parada no hay nada que optimizar.
-    if (count($conCoords) < 2) return null;
+    // Sin paradas con coordenadas no hay nada que calcular. Con UNA sola
+    // no hay orden que optimizar, pero igual se pide el trazado por calles
+    // (si no, el tracking dibuja una línea recta).
+    if (count($conCoords) < 1) return null;
     // La Routes API admite hasta 25 waypoints intermedios. Si hubiera más,
     // no optimizamos por API (se queda el orden por cercanía).
     if (count($conCoords) > 25) return null;
@@ -340,10 +432,11 @@ function optimizarOrdenRuta($boletas, $origenLat = null, $origenLon = null, $des
     $body = [
         'origin'      => $origen,
         'destination' => $destino,
-        'intermediates' => $waypoints,
         'travelMode'  => 'DRIVE',
-        'optimizeWaypointOrder' => true,
     ];
+    // La API no admite optimizar el orden con menos de 2 intermedias.
+    if ($waypoints) $body['intermediates'] = $waypoints;
+    if (count($waypoints) > 1) $body['optimizeWaypointOrder'] = true;
 
     $ch = curl_init('https://routes.googleapis.com/directions/v2:computeRoutes');
     curl_setopt($ch, CURLOPT_POST, true);
@@ -353,7 +446,7 @@ function optimizarOrdenRuta($boletas, $origenLat = null, $origenLon = null, $des
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
         'X-Goog-Api-Key: ' . GOOGLE_ROUTES_KEY,
-        'X-Goog-FieldMask: routes.optimizedIntermediateWaypointIndex',
+        'X-Goog-FieldMask: routes.optimizedIntermediateWaypointIndex,routes.polyline.encodedPolyline',
     ]);
     $resp = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -362,7 +455,12 @@ function optimizarOrdenRuta($boletas, $origenLat = null, $origenLon = null, $des
     if ($resp === false || $httpCode !== 200) return null;
     $data = json_decode($resp, true);
     $orden = $data['routes'][0]['optimizedIntermediateWaypointIndex'] ?? null;
+    // Sin optimización (0 o 1 intermedia) el orden queda como vino.
+    if (!is_array($orden) && count($waypoints) < 2) $orden = array_keys($intermedias);
     if (!is_array($orden)) return null;
+    // Trazado por calles de la ruta optimizada (viene en la misma respuesta,
+    // sin costo extra): se guarda en el viaje para dibujarlo en el tracking.
+    $polylineOut = $data['routes'][0]['polyline']['encodedPolyline'] ?? null;
 
     // Reconstruir la lista de ids en el orden óptimo.
     $ids = [];
@@ -375,4 +473,54 @@ function optimizarOrdenRuta($boletas, $origenLat = null, $origenLon = null, $des
     // Las paradas sin coordenadas (que no entraron al cálculo) van al final.
     foreach ($sinCoords as $b) $ids[] = intval($b['id']);
     return $ids;
+}
+
+/*
+ * Calcula la distancia real por ruta usando Routes API.
+ * Ruta: Fábrica → paradas en orden → destino final.
+ * Devuelve km como float, o 0 si falla (fallback a Haversine en el caller).
+ */
+function calcularKmRuta($boletas, $destinoLat = null, $destinoLon = null) {
+    $conCoords = array_values(array_filter($boletas, fn($b) => $b['lat'] !== null && $b['lat'] !== '' && $b['lon'] !== null && $b['lon'] !== ''));
+    if (count($conCoords) < 1) return 0;
+    // Routes API acepta hasta 25 waypoints intermedios
+    if (count($conCoords) > 25) return 0;
+
+    $origen = ['location' => ['latLng' => ['latitude' => FABRICA_LAT, 'longitude' => FABRICA_LON]]];
+
+    $destLat = $destinoLat !== null ? floatval($destinoLat) : FABRICA_LAT;
+    $destLon = $destinoLon !== null ? floatval($destinoLon) : FABRICA_LON;
+    $destino = ['location' => ['latLng' => ['latitude' => $destLat, 'longitude' => $destLon]]];
+
+    // Todas las paradas son intermedias (el destino final es el punto de retorno)
+    $intermediates = array_map(fn($b) => [
+        'location' => ['latLng' => ['latitude' => floatval($b['lat']), 'longitude' => floatval($b['lon'])]]
+    ], $conCoords);
+
+    $body = [
+        'origin'        => $origen,
+        'destination'   => $destino,
+        'intermediates' => $intermediates,
+        'travelMode'    => 'DRIVE',
+        'routingPreference' => 'TRAFFIC_UNAWARE',
+    ];
+
+    $ch = curl_init('https://routes.googleapis.com/directions/v2:computeRoutes');
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'X-Goog-Api-Key: ' . GOOGLE_ROUTES_KEY,
+        'X-Goog-FieldMask: routes.distanceMeters',
+    ]);
+    $resp = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($resp === false || $httpCode !== 200) return 0;
+    $data = json_decode($resp, true);
+    $metros = $data['routes'][0]['distanceMeters'] ?? 0;
+    return $metros > 0 ? round($metros / 1000, 1) : 0;
 }

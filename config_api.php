@@ -26,6 +26,24 @@ if ($action === 'nuevo_repartidor') {
     $camion   = !empty($input['camion_id']) ? intval($input['camion_id']) : null;
     $usuario  = strtolower(explode('@', $email)[0]);
 
+    // Domicilio particular (punto de finalización personalizado)
+    $dest_calle     = trim($input['dest_calle']     ?? '');
+    $dest_altura    = trim($input['dest_altura']    ?? '');
+    $dest_localidad = trim($input['dest_localidad'] ?? '');
+    $dest_provincia = trim($input['dest_provincia'] ?? '');
+    $dest_cp        = trim($input['dest_cp']        ?? '');
+    $dest_lat = null; $dest_lon = null;
+    if ($dest_calle && $dest_localidad) {
+        $destDir = "$dest_calle $dest_altura, $dest_localidad";
+        if ($dest_cp) $destDir .= ", $dest_cp";
+        $destDir .= ', Buenos Aires, Argentina';
+        $gr = buscarGoogleGeocoding($destDir, null);
+        if (!empty($gr['candidatos'][0])) {
+            $dest_lat = floatval($gr['candidatos'][0]['lat']);
+            $dest_lon = floatval($gr['candidatos'][0]['lon']);
+        }
+    }
+
     if (!$nombre || !$email || !$password)
         jsonResponse(['success'=>false,'message'=>'Completá todos los campos']);
     if (!filter_var($email, FILTER_VALIDATE_EMAIL))
@@ -57,8 +75,8 @@ if ($action === 'nuevo_repartidor') {
     $stmt->execute();
     $user_id = $db->insert_id;
 
-    $stmt2 = prep($db, 'INSERT INTO repartidores (usuario_id, camion_id) VALUES (?,?)');
-    $stmt2->bind_param('ii', $user_id, $camion);
+    $stmt2 = prep($db, 'INSERT INTO repartidores (usuario_id, camion_id, dest_calle, dest_altura, dest_localidad, dest_provincia, dest_cp, dest_lat, dest_lon) VALUES (?,?,?,?,?,?,?,?,?)');
+    $stmt2->bind_param('iisssssdd', $user_id, $camion, $dest_calle, $dest_altura, $dest_localidad, $dest_provincia, $dest_cp, $dest_lat, $dest_lon);
     $stmt2->execute();
 
     jsonResponse(['success'=>true,'message'=>'Repartidor creado']);
@@ -101,8 +119,43 @@ if ($action === 'editar_repartidor') {
         $stmt->execute();
     }
 
-    $stmt = prep($db, 'UPDATE repartidores SET camion_id=? WHERE id=?');
-    $stmt->bind_param('ii', $camion, $id);
+    // Actualizar domicilio particular si se envió algún campo
+    $dest_calle     = isset($input['dest_calle'])     ? trim($input['dest_calle'])     : null;
+    $dest_altura    = isset($input['dest_altura'])    ? trim($input['dest_altura'])    : null;
+    $dest_localidad = isset($input['dest_localidad']) ? trim($input['dest_localidad']) : null;
+    $dest_provincia = isset($input['dest_provincia']) ? trim($input['dest_provincia']) : null;
+    $dest_cp        = isset($input['dest_cp'])        ? trim($input['dest_cp'])        : null;
+
+    if ($dest_calle !== null || $dest_localidad !== null) {
+        $curRep = $db->query("SELECT * FROM repartidores WHERE id=$id")->fetch_assoc();
+        $dc = $dest_calle     ?? ($curRep['dest_calle']     ?? '');
+        $da = $dest_altura    ?? ($curRep['dest_altura']    ?? '');
+        $dl = $dest_localidad ?? ($curRep['dest_localidad'] ?? '');
+        $dp = $dest_provincia ?? ($curRep['dest_provincia'] ?? '');
+        $dcp= $dest_cp        ?? ($curRep['dest_cp']        ?? '');
+
+        $dLat = $curRep ? floatval($curRep['dest_lat'] ?? 0) ?: null : null;
+        $dLon = $curRep ? floatval($curRep['dest_lon'] ?? 0) ?: null : null;
+
+        // Re-geocodificar si cambió calle o localidad
+        $dirCambio = ($dc !== ($curRep['dest_calle']??'')) || ($dl !== ($curRep['dest_localidad']??''));
+        if ($dirCambio && $dc && $dl) {
+            $destDir = "$dc $da, $dl";
+            if ($dcp) $destDir .= ", $dcp";
+            $destDir .= ', Buenos Aires, Argentina';
+            $gr = buscarGoogleGeocoding($destDir, null);
+            if (!empty($gr['candidatos'][0])) {
+                $dLat = floatval($gr['candidatos'][0]['lat']);
+                $dLon = floatval($gr['candidatos'][0]['lon']);
+            }
+        }
+
+        $stmt = prep($db, 'UPDATE repartidores SET camion_id=?, dest_calle=?, dest_altura=?, dest_localidad=?, dest_provincia=?, dest_cp=?, dest_lat=?, dest_lon=? WHERE id=?');
+        $stmt->bind_param('isssssddi', $camion, $dc, $da, $dl, $dp, $dcp, $dLat, $dLon, $id);
+    } else {
+        $stmt = prep($db, 'UPDATE repartidores SET camion_id=? WHERE id=?');
+        $stmt->bind_param('ii', $camion, $id);
+    }
     $stmt->execute();
     jsonResponse(['success'=>true,'message'=>'Repartidor actualizado']);
 }

@@ -1,4 +1,4 @@
-# TruckRoute 🚛🍃
+# Turbologistica 🚛🍃
 
 > Sistema web de gestión de rutas, optimización logística y seguimiento en tiempo real para **Tres Reyes — Aceitunas y Encurtidos**.
 
@@ -10,7 +10,7 @@
 
 ## 📝 Descripción
 
-**TruckRoute** es un sistema integral de planificación y control logístico desarrollado a medida para la empresa **Tres Reyes** (especializada en la producción y distribución de aceitunas y encurtidos). Reemplaza la gestión tradicional y manual de repartos (planillas aisladas, coordinación por WhatsApp y rutas fijas) por un flujo operativo 100% digitalizado.
+**Turbologistica** es un sistema integral de planificación y control logístico desarrollado a medida para la empresa **Tres Reyes** (especializada en la producción y distribución de aceitunas y encurtidos). Reemplaza la gestión tradicional y manual de repartos (planillas aisladas, coordinación por WhatsApp y rutas fijas) por un flujo operativo 100% digitalizado.
 
 El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, geocodifica las direcciones entregadas, agrupa los envíos por zonas geográficas, optimiza la secuencia de paradas de cada vehículo mediante algoritmos de ruteo y delega la navegación directa a Google Maps en los dispositivos de los repartidores.
 
@@ -20,11 +20,15 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 
 * 📄 **Carga e Ingesta Automática de Boletas:** Procesamiento y extracción de datos clave (cliente, dirección, peso de carga) directamente desde boletas en formato PDF.
 * 📍 **Geocodificación y Agrupación por Zonas:** Conversión automática de direcciones en coordenadas de mapa y agrupamiento geográfico inteligente.
-* 🧠 **Optimización de Rutas (Algoritmo de Vecino Más Cercano):** Cálculo automático del orden óptimo de paradas para minimizar la distancia recorrida y los tiempos de entrega.
-* 📲 **Navegación Handoff a Google Maps:** Redirección directa desde la app web a la aplicación de Google Maps en el dispositivo del chofer, cargando automáticamente la ruta óptima completa con hasta 23 paradas.
-* 🛰️ **Tracking y Monitoreo en Tiempo Real:** Visualización en vivo sobre el mapa centralizado de las posiciones de la flota en viaje.
+* 🧠 **Optimización de Rutas (Google Routes API):** El orden óptimo de paradas se calcula con `optimizeWaypointOrder` y la ruta real por calles se guarda para dibujarla en el mapa, sin consultas extra a Google en cada actualización.
+* 📲 **Navegación Handoff a Google Maps:** Redirección directa desde la app web a la aplicación de Google Maps en el dispositivo del chofer, cargando automáticamente la ruta óptima con hasta 23 paradas (solo las pendientes: las ya entregadas no se vuelven a incluir).
+* 🛰️ **Tracking y Monitoreo en Tiempo Real:** Visualización en vivo de la flota. La ubicación llega en segundo plano desde la app **Traccar Client** (o desde la web como alternativa) y la ruta se dibuja por calles reales desde la posición actual del camión.
 * ⚠️ **Módulo de Alertas Automáticas:** Notificaciones en tiempo real por desviaciones de ruta no autorizadas o cierres de viaje.
 * 👥 **Gestión de Roles y Permisos:** Control de acceso granular estructurado para tres perfiles (Administrador, Administrador Operativo y Repartidor).
+* 🗓️ **Viajes programados para otros días:** Disponibilidad de camiones por día (un viaje por camión por día; los camiones en mantenimiento nunca están disponibles) y confirmación de varias zonas a la vez con fecha, camión y destino.
+* 🧾 **Número de boleta:** El lector de PDF reconoce el número de boleta en los dos formatos (`N 0006-00002396` y `N° de cobro`).
+* ⏸️ **Boletas pospuestas:** Las no entregadas pasan solas a pospuestas al finalizar el viaje; botón Posponer por boleta y "Pasar todas a pendientes".
+* 🔒 **Entregas controladas:** El repartidor no puede marcar entregas sin iniciar el viaje, y las paradas se cuentan por dirección real.
 * 📊 **Histórico de Envíos y Reportes:** Módulo de analítica sobre boletas procesadas, métricas de rendimiento e historial de viajes.
 
 ---
@@ -52,7 +56,8 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 
 ```text
 ├── index.html                  # Interfaz principal (Single Page Application)
-├── config.php                  # Configuración de base de datos y parámetros del sistema
+├── config.php                  # PLANTILLA sin credenciales: completar con tus datos (BD, SMTP, claves de Google, TRACCAR_KEY)
+├── .htaccess                   # Reglas de reescritura y caché
 ├── config_api.php              # Configuración de claves de API y endpoints externos
 ├── login.php                   # Autenticación y control de sesiones
 ├── recuperar.php               # Módulo de recuperación de contraseña por email
@@ -102,8 +107,12 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
    * Modificar el archivo `config.php` indicando host, usuario, contraseña y nombre de la base de datos local.
    * Modificar el archivo `config_api.php` para ingresar tu propia clave de **Google Maps API Key**.
 
-4. **Ejecutar el proyecto:**
-   * Abrir en tu navegador local la ruta correspondiente (ej. `http://localhost/truckroute`).
+4. **Seguimiento en segundo plano (opcional):**
+   * Definir `TRACCAR_KEY` en `config.php` con una clave larga y aleatoria.
+   * En la app **Traccar Client** del repartidor: ID de dispositivo = ID del repartidor (figura en Configuración) y URL del servidor `https://TU-DOMINIO/tracking.php?action=traccar&key=TU_CLAVE`. La posición solo se guarda mientras el viaje está en curso.
+
+5. **Ejecutar el proyecto:**
+   * Abrir en tu navegador local la ruta correspondiente (ej. `http://localhost/Turbologistica`).
 
 ---
 
@@ -130,4 +139,4 @@ Proyecto desarrollado por el **Equipo N.º 5** — Instituto Leonardo Murialdo (
 **Soporte Técnico & Contacto:** `proyectointermiami@gmail.com`
 
 ---
-*TruckRoute v1.0 · Desarrollado para Tres Reyes — Aceitunas y Encurtidos*
+*Turbologistica v1.1 · Desarrollado para Tres Reyes — Aceitunas y Encurtidos*

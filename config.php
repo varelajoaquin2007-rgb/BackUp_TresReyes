@@ -15,29 +15,29 @@ ini_set('log_errors', '1');
 // considera "hoy" — y por eso el repartidor no lo veía en su lista.
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-define('DB_HOST', 'sql113.infinityfree.com');
-define('DB_USER', 'if0_42217493');
-define('DB_PASS', 'kmShh7Q1o1f1Ae');
-define('DB_NAME', 'if0_42217493_base_datos');
+define('DB_HOST', 'TU_HOST_MYSQL');
+define('DB_USER', 'TU_USUARIO_MYSQL');
+define('DB_PASS', 'TU_CLAVE_MYSQL');
+define('DB_NAME', 'TU_BASE_DE_DATOS');
 
 // --- Configuración SMTP (para recuperación de contraseña) ---
 // Completá SMTP_PASS con la "Contraseña de aplicación" de 16 letras
 // que generaste en myaccount.google.com/apppasswords (sin espacios).
 define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 587);
-define('SMTP_USER', 'proyectointermiami@gmail.com');
-define('SMTP_PASS', 'sntysgoitbgkpjnx');
+define('SMTP_USER', 'tu_correo@gmail.com');
+define('SMTP_PASS', 'CONTRASEÑA_DE_APLICACION_GMAIL');
 define('SMTP_FROM_NAME', 'Tres Reyes');
 
 // Geocodificación y optimización de rutas (dirección → coordenadas,
 // orden óptimo de paradas): key del SERVIDOR. Restringida por API a
 // Geocoding + Routes, sin restricción de dominio (la usa el PHP, nunca
 // se ve en el navegador).
-define('GOOGLE_GEOCODING_KEY', 'AIzaSyAq7Me_OOtsjjh0Pf0nm0XomMfc6DeLS2o');
-define('GOOGLE_ROUTES_KEY', 'AIzaSyAq7Me_OOtsjjh0Pf0nm0XomMfc6DeLS2o');
+define('GOOGLE_GEOCODING_KEY', 'TU_KEY_DE_SERVIDOR');
+define('GOOGLE_ROUTES_KEY', 'TU_KEY_DE_SERVIDOR');
 // Mapa del panel (Maps JavaScript): key del NAVEGADOR. Viaja al
 // navegador; se protege con restricción por dominio en Google Cloud.
-define('GOOGLE_MAPS_KEY', 'AIzaSyCO5nKrATJRFBlYvyO1_ZQLSs2w7MDoI1Q');
+define('GOOGLE_MAPS_KEY', 'TU_KEY_DE_NAVEGADOR');
 
 // Ubicación de la fábrica (San Miguel) — punto de partida de todos los
 // repartos. Se usa como límite de sanidad al geocodificar: si un
@@ -52,10 +52,16 @@ define('FABRICA_LON', -58.709439);
 // viaje termina en la última entrega (ver optimizarOrdenRuta en
 // lib_zonas.php).
 
+// Clave secreta de la app Traccar Client (seguimiento GPS en segundo
+// plano). Va en la URL del servidor que se carga en la app; sin ella
+// tracking.php rechaza las posiciones, para que nadie mande ubicaciones
+// falsas. Para cambiarla: poné otro valor acá y actualizá la URL en la app.
+define('TRACCAR_KEY', 'CLAVE_SECRETA_LARGA_ALEATORIA');
+
 // El mail de "recuperar contraseña" SIEMPRE se manda a esta casilla,
 // sin importar qué usuario/email haya pedido el reseteo. Así solo vos
 // podés completar el cambio de contraseña, nunca otro empleado.
-define('ADMIN_RECOVERY_EMAIL', 'proyectointermiami@gmail.com');
+define('ADMIN_RECOVERY_EMAIL', 'admin@tudominio.com');
 
 function getDB() {
     // Restaura el comportamiento clásico de mysqli (sin excepciones):
@@ -94,3 +100,4 @@ function headers() {
 function getInput() {
     return json_decode(file_get_contents('php://input'), true) ?? [];
 }
+

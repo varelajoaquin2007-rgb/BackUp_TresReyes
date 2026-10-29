@@ -9,6 +9,14 @@ $db = getDB();
 // GET - listar viajes
 if ($method === 'GET') {
     liberarCamionesTrabados($db);
+
+    // Camiones ya asignados a un viaje (confirmado o en curso) y el día
+    // de ese viaje: un camión hace un solo viaje por día.
+    if (isset($_GET['ocupacion'])) {
+        $rows = $db->query("SELECT camion_id, fecha FROM viajes WHERE camion_id IS NOT NULL AND estado IN ('confirmado','en_curso')")->fetch_all(MYSQLI_ASSOC);
+        jsonResponse(['success'=>true,'ocupacion'=>$rows]);
+    }
+
     $fecha = $_GET['fecha'] ?? date('Y-m-d');
     $repartidor_id = isset($_GET['repartidor_id']) ? intval($_GET['repartidor_id']) : null;
     $historico     = isset($_GET['historico']) && $_GET['historico'] == '1';
@@ -17,14 +25,13 @@ if ($method === 'GET') {
         // Histórico: TODOS los viajes (finalizados, en curso, confirmados),
         // sin filtrar por fecha, para la pestaña de administrador.
         $stmt = $db->prepare('
-            SELECT v.*, c.patente, c.modelo, u.nombre as repartidor_nombre,
-                   COALESCE(v.km_estimado, 0) as km_estimado
+            SELECT v.*, c.patente, c.modelo, u.nombre as repartidor_nombre
             FROM viajes v
             LEFT JOIN camiones c ON c.id = v.camion_id
             LEFT JOIN repartidores r ON r.id = v.repartidor_id
             LEFT JOIN usuarios u ON u.id = r.usuario_id
             WHERE v.estado <> "armado"
-            ORDER BY v.id DESC
+            ORDER BY v.fecha DESC, v.id DESC
             LIMIT 300
         ');
     } elseif ($repartidor_id) {
@@ -40,7 +47,8 @@ if ($method === 'GET') {
             LEFT JOIN usuarios u ON u.id = r.usuario_id
             WHERE (v.repartidor_id = ? OR v.repartidor_id IS NULL)
               AND (
-                    v.estado IN ("confirmado","en_curso")
+                    v.estado = "en_curso"
+                 OR (v.estado = "confirmado" AND v.fecha <= CURDATE())
                  OR (v.estado = "finalizado" AND v.finished_at >= NOW() - INTERVAL 48 HOUR)
               )
             ORDER BY v.fecha DESC, v.id DESC
@@ -52,8 +60,7 @@ if ($method === 'GET') {
         $hasta   = $_GET['hasta'] ?? $fecha;
         if ($reporte) {
             $stmt = $db->prepare('
-                SELECT v.*, c.patente, c.modelo, u.nombre as repartidor_nombre,
-                       COALESCE(v.km_estimado, 0) as km_estimado
+                SELECT v.*, c.patente, c.modelo, u.nombre as repartidor_nombre
                 FROM viajes v
                 LEFT JOIN camiones c ON c.id = v.camion_id
                 LEFT JOIN repartidores r ON r.id = v.repartidor_id
@@ -64,13 +71,12 @@ if ($method === 'GET') {
             $stmt->bind_param('ss', $fecha, $hasta);
         } else {
             $stmt = $db->prepare('
-                SELECT v.*, c.patente, c.modelo, u.nombre as repartidor_nombre,
-                       COALESCE(v.km_estimado, 0) as km_estimado
+                SELECT v.*, c.patente, c.modelo, u.nombre as repartidor_nombre
                 FROM viajes v
                 LEFT JOIN camiones c ON c.id = v.camion_id
                 LEFT JOIN repartidores r ON r.id = v.repartidor_id
                 LEFT JOIN usuarios u ON u.id = r.usuario_id
-                WHERE v.fecha = ?
+                WHERE v.fecha = ? AND v.estado IN ("confirmado","en_curso","finalizado")
                 ORDER BY v.id DESC
             ');
             $stmt->bind_param('s', $fecha);
@@ -88,6 +94,15 @@ if ($method === 'GET') {
     foreach ($viajes as &$v) {
         $vc = obtenerViajeConBoletas($db, $v['id']);
         $v['boletas'] = $vc['boletas'] ?? [];
+        // Para viajes finalizados donde boletas ya fueron borradas,
+        // usar el snapshot guardado en boletas_historico
+        if (empty($v['boletas']) && !empty($v['boletas_historico'])) {
+            $snap = json_decode($v['boletas_historico'], true);
+            if (is_array($snap)) $v['boletas'] = $snap;
+        }
+        unset($v['boletas_historico']); // no necesario en el frontend
+        unset($v['ruta_polyline']);     // solo lo usa el tracking
+        $v['km_estimado'] = isset($v['km_estimado']) ? floatval($v['km_estimado']) : 0;
         $v['destino_lat'] = $vc['destino_lat'] ?? null;
         $v['destino_lon'] = $vc['destino_lon'] ?? null;
         $v['destino_nombre'] = $vc['destino_nombre'] ?? 'Cochera';
@@ -147,18 +162,6 @@ if ($method === 'POST') {
             ]];
         }
 
-        // Se valida la disponibilidad de los camiones UNA sola vez, con la
-        // foto de "antes" de esta confirmación.
-        $camionIds = array_values(array_unique(array_filter(array_map(
-            fn($a) => intval($a['camion_id'] ?? 0), $asignaciones
-        ))));
-        $disponibles = [];
-        if ($camionIds) {
-            $ids = implode(',', $camionIds);
-            $res = $db->query("SELECT id FROM camiones WHERE id IN ($ids) AND estado='disponible'");
-            while ($row = $res->fetch_assoc()) $disponibles[intval($row['id'])] = true;
-        }
-
         // Agrupar las asignaciones por camión: si 2+ zonas comparten el
         // mismo camión, se UNIFICAN en un solo viaje antes de confirmar
         // — todas las boletas pasan a un único registro, con una sola
@@ -177,20 +180,57 @@ if ($method === 'POST') {
                 foreach ($grupo as $a) $resultados[] = ['viaje_id'=>intval($a['viaje_id']??0),'success'=>false,'message'=>'Elegí el camión que va a salir'];
                 continue;
             }
-            if (!isset($disponibles[$cid])) {
-                foreach ($grupo as $a) $resultados[] = ['viaje_id'=>intval($a['viaje_id']??0),'success'=>false,'message'=>'Ese camión ya no está disponible'];
+            // Día de salida: el que eligió el admin (hoy o futuro). Sin día
+            // (o con una fecha inválida/pasada) sale hoy.
+            $hoy = date('Y-m-d');
+            $dia = trim($grupo[0]['dia_salida'] ?? '');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dia) || $dia < $hoy) $dia = $hoy;
+            $esHoy = ($dia === $hoy);
+
+            // Disponibilidad del camión: para salir HOY tiene que estar
+            // disponible. Para otro día también sirve uno "en viaje" ahora
+            // (va a estar de vuelta para entonces). En mantenimiento no se
+            // puede asignar nunca, hasta que cambie de estado.
+            $estadoCam = ($db->query("SELECT estado FROM camiones WHERE id=$cid")->fetch_assoc()['estado'] ?? null);
+            $msgCam = null;
+            if ($estadoCam === null)                          $msgCam = 'Ese camión no existe';
+            elseif ($estadoCam === 'mantenimiento')           $msgCam = 'Ese camión está en mantenimiento';
+            elseif ($estadoCam === 'en_viaje' && $esHoy)      $msgCam = 'Ese camión está en viaje ahora. Elegí un día de salida posterior a hoy o usá otro camión';
+            elseif ($estadoCam !== 'disponible' && $estadoCam !== 'en_viaje') $msgCam = 'Ese camión ya no está disponible';
+            if (!$msgCam) {
+                $ocupado = $db->query("SELECT id FROM viajes WHERE camion_id=$cid AND fecha='$dia' AND estado IN ('confirmado','en_curso') LIMIT 1")->fetch_assoc();
+                if ($ocupado) $msgCam = 'Ese camión ya tiene un viaje asignado para ese día';
+            }
+            if ($msgCam) {
+                foreach ($grupo as $a) $resultados[] = ['viaje_id'=>intval($a['viaje_id']??0),'success'=>false,'message'=>$msgCam];
                 continue;
             }
 
             $rid = !empty($grupo[0]['repartidor_id']) ? intval($grupo[0]['repartidor_id']) : null;
-            // Punto de finalización elegido (uno solo compartido por todo
-            // el grupo, igual que el camión). Si no se eligió ninguno,
-            // el viaje termina en la cochera de siempre (destino_id NULL).
-            $destinoId = !empty($grupo[0]['destino_id']) ? intval($grupo[0]['destino_id']) : null;
+            // Punto de finalización: 'deposito' = fábrica, 'repartidor' = casa del
+            // repartidor elegido, null = última entrega (sin punto fijo).
+            $destinoTipo = $grupo[0]['destino_tipo'] ?? null;
+            $destFinalLat = null; $destFinalLon = null; $destFinalNombre = null;
             $destLat = null; $destLon = null;
-            if ($destinoId) {
-                $dp = $db->query("SELECT lat, lon FROM puntos_finalizacion WHERE id=$destinoId")->fetch_assoc();
-                if ($dp && $dp['lat'] !== null) { $destLat = floatval($dp['lat']); $destLon = floatval($dp['lon']); }
+
+            if ($destinoTipo === 'deposito') {
+                $destFinalLat = FABRICA_LAT; $destFinalLon = FABRICA_LON;
+                $destFinalNombre = 'Depósito';
+                $destLat = FABRICA_LAT; $destLon = FABRICA_LON;
+            } elseif ($destinoTipo === 'repartidor' && $rid) {
+                $repRow = $db->query("SELECT r.dest_lat, r.dest_lon, u.nombre FROM repartidores r JOIN usuarios u ON u.id=r.usuario_id WHERE r.id=$rid")->fetch_assoc();
+                if ($repRow && $repRow['dest_lat']) {
+                    $destFinalLat = floatval($repRow['dest_lat']); $destFinalLon = floatval($repRow['dest_lon']);
+                    $destFinalNombre = 'Casa de ' . $repRow['nombre'];
+                    $destLat = $destFinalLat; $destLon = $destFinalLon;
+                }
+            } else {
+                // Retrocompat: viajes viejos con destino_id (puntos_finalizacion)
+                $destinoId = !empty($grupo[0]['destino_id']) ? intval($grupo[0]['destino_id']) : null;
+                if ($destinoId) {
+                    $dp = $db->query("SELECT lat, lon FROM puntos_finalizacion WHERE id=$destinoId")->fetch_assoc();
+                    if ($dp && $dp['lat'] !== null) { $destLat = floatval($dp['lat']); $destLon = floatval($dp['lon']); }
+                }
             }
             $viajeIds = array_values(array_unique(array_filter(array_map(fn($a)=>intval($a['viaje_id']??0), $grupo))));
             if (!$viajeIds) continue;
@@ -217,19 +257,28 @@ if ($method === 'POST') {
                 }
             }
 
-            if ($destinoId) {
+            // Retrocompat: guardar destino_id si se usó el sistema viejo
+            if (!empty($destinoId)) {
                 $db->query("UPDATE viajes SET destino_id=$destinoId WHERE id=$vidPrimario");
             }
+            // Nuevo sistema: guardar coordenadas directamente en el viaje
+            if ($destFinalLat !== null) {
+                $dNombre = $db->real_escape_string($destFinalNombre ?? '');
+                $db->query("UPDATE viajes SET destino_final_lat=$destFinalLat, destino_final_lon=$destFinalLon, destino_final_nombre='$dNombre' WHERE id=$vidPrimario");
+            }
 
-            $stmt = $db->prepare('UPDATE viajes SET estado="confirmado", camion_id=?, repartidor_id=?, fecha=CURDATE() WHERE id=? AND estado="armado"');
-            $stmt->bind_param('iii', $cid, $rid, $vidPrimario);
+            $stmt = $db->prepare('UPDATE viajes SET estado="confirmado", camion_id=?, repartidor_id=?, fecha=?, dia_salida=? WHERE id=? AND estado="armado"');
+            $stmt->bind_param('iissi', $cid, $rid, $dia, $dia, $vidPrimario);
             $stmt->execute();
             if ($db->affected_rows === 0) {
                 foreach ($viajeIds as $vid) $resultados[] = ['viaje_id'=>$vid,'success'=>false,'message'=>'El viaje ya no está pendiente de confirmar'];
                 continue;
             }
 
-            $db->query("UPDATE camiones SET estado='en_viaje' WHERE id=$cid");
+            // Solo si sale hoy el camión pasa a "en viaje" ya. Si es para
+            // otro día conserva su estado actual hasta que el repartidor
+            // inicie ese viaje (ver 'iniciar').
+            if ($esHoy) $db->query("UPDATE camiones SET estado='en_viaje' WHERE id=$cid");
 
             // Optimizar el orden de TODAS las paradas juntas (las de las
             // zonas unificadas incluidas) — una sola ruta de punta a
@@ -237,7 +286,9 @@ if ($method === 'POST') {
             // elegido (o la cochera, si no se eligió ninguno).
             $bs = $db->query("SELECT id, lat, lon, peso_kg FROM boletas WHERE viaje_id=$vidPrimario")->fetch_all(MYSQLI_ASSOC);
             $peso_total = array_sum(array_column($bs, 'peso_kg'));
-            $ordenOptimo = optimizarOrdenRuta($bs, null, null, $destLat, $destLon);
+            $ordenOptimo = optimizarOrdenRuta($bs, null, null, $destLat, $destLon, $rutaPoly);
+            asegurarColumnaRuta($db);
+            guardarRutaViaje($db, $vidPrimario, $rutaPoly);
             if ($ordenOptimo) {
                 $orden_json = json_encode($ordenOptimo);
                 $st = $db->prepare('UPDATE viajes SET orden_paradas=?, peso_total=? WHERE id=?');
@@ -318,29 +369,48 @@ if ($method === 'POST') {
 
         if ($db->affected_rows === 0) jsonResponse(['success'=>false,'message'=>'No se pudo finalizar']);
 
-        // Calcular km estimado basado en paradas del viaje
-        $bols = $db->query("SELECT lat, lon FROM boletas WHERE viaje_id=$viaje_id AND lat IS NOT NULL ORDER BY id ASC")->fetch_all(MYSQLI_ASSOC);
-        $km_est = 0;
-        if (count($bols) > 1) {
-            // Distancia desde fábrica + entre paradas
-            $prev_lat = -34.5467; $prev_lon = -58.7134; // Fábrica
-            foreach ($bols as $b) {
-                $km_est += haversine($prev_lat, $prev_lon, floatval($b['lat']), floatval($b['lon']));
-                $prev_lat = floatval($b['lat']); $prev_lon = floatval($b['lon']);
+        // Snapshot de boletas ANTES de borrarlas (para el histórico)
+        asegurarColumnaNumeroBoleta($db);
+        $bols = $db->query("SELECT id, cliente, numero_boleta, direccion, lat, lon, entregada_at, peso_kg, zona, estado FROM boletas WHERE viaje_id=$viaje_id ORDER BY id ASC")->fetch_all(MYSQLI_ASSOC);
+
+        // Los km se calculan sobre lo que realmente se entregó (si no se
+        // marcó ninguna, sobre todas las paradas del viaje).
+        $bolsKm = array_values(array_filter($bols, fn($b) => $b['estado'] === 'entregada'));
+        if (!$bolsKm) $bolsKm = $bols;
+
+        // Calcular km por ruta real con Routes API (fallback: Haversine)
+        $viajeDest = $db->query("SELECT destino_final_lat, destino_final_lon FROM viajes WHERE id=$viaje_id")->fetch_assoc();
+        $dLat = $viajeDest['destino_final_lat'] ?? null;
+        $dLon = $viajeDest['destino_final_lon'] ?? null;
+        $km_est = calcularKmRuta($bolsKm, $dLat, $dLon);
+        if ($km_est <= 0) {
+            // Fallback Haversine si Routes API falla
+            $bols_geo = array_filter($bolsKm, fn($b) => $b['lat'] !== null && $b['lat'] !== '');
+            if (count($bols_geo) > 1) {
+                $prev_lat = FABRICA_LAT; $prev_lon = FABRICA_LON;
+                foreach ($bols_geo as $b) {
+                    $km_est += haversine($prev_lat, $prev_lon, floatval($b['lat']), floatval($b['lon']));
+                    $prev_lat = floatval($b['lat']); $prev_lon = floatval($b['lon']);
+                }
+                $km_est += haversine($prev_lat, $prev_lon, $dLat ?? FABRICA_LAT, $dLon ?? FABRICA_LON);
+                $km_est = round($km_est, 1);
             }
-            $km_est += haversine($prev_lat, $prev_lon, -34.5467, -58.7134); // Vuelta
-            $km_est = round($km_est, 1);
-        }
-        $db->query("UPDATE viajes SET km_estimado=$km_est WHERE id=$viaje_id");
-
-        // Liberar camión
-        $cam = $db->query("SELECT camion_id FROM viajes WHERE id=$viaje_id")->fetch_assoc();
-        if ($cam && $cam['camion_id']) {
-            $db->query("UPDATE camiones SET estado='disponible' WHERE id=".$cam['camion_id']);
         }
 
-        // Marcar boletas como entregadas
-        $db->query("UPDATE boletas SET estado='entregada' WHERE viaje_id=$viaje_id");
+        // Guardar snapshot JSON y km antes de borrar
+        $hist_json = $db->real_escape_string(json_encode($bols));
+        $db->query("UPDATE viajes SET km_estimado=$km_est, boletas_historico='$hist_json' WHERE id=$viaje_id");
+
+        // Las boletas que el repartidor NO marcó como entregadas (ej. el
+        // local estaba cerrado) pasan a "pospuestas" para reprogramarlas.
+        $noEntregadas = count(array_filter($bols, fn($b) => $b['estado'] !== 'entregada'));
+        $db->query("UPDATE boletas SET viaje_id=NULL, estado='pospuesta', entregada_at=NULL WHERE viaje_id=$viaje_id AND estado<>'entregada'");
+
+        // Borrar las boletas entregadas del viaje
+        $db->query("DELETE FROM boletas WHERE viaje_id=$viaje_id");
+
+        // Liberar camión (si no tiene otro viaje en marcha)
+        liberarCamionesTrabados($db);
 
         // Alerta de finalización
         $v = $db->query("SELECT repartidor_id FROM viajes WHERE id=$viaje_id")->fetch_assoc();
@@ -353,12 +423,19 @@ if ($method === 'POST') {
             $stmt->execute();
         }
 
-        jsonResponse(['success'=>true,'message'=>'Viaje finalizado']);
+        jsonResponse(['success'=>true,'message'=>$noEntregadas > 0
+            ? "Viaje finalizado. $noEntregadas boleta(s) sin entregar pasaron a Boletas pospuestas."
+            : 'Viaje finalizado']);
     }
 
     // Marcar parada individual como entregada (guarda también la hora)
     if ($action === 'entregar_parada') {
         $boleta_id = intval($input['boleta_id']);
+        // Solo se puede entregar si el viaje ya fue iniciado por el repartidor.
+        $ve = $db->query("SELECT v.estado FROM boletas b JOIN viajes v ON v.id=b.viaje_id WHERE b.id=$boleta_id")->fetch_assoc();
+        if (!$ve || $ve['estado'] !== 'en_curso') {
+            jsonResponse(['success'=>false,'message'=>'Primero tenés que iniciar el viaje para marcar entregas']);
+        }
         $stmt = $db->prepare('UPDATE boletas SET estado="entregada", entregada_at=NOW() WHERE id=?');
         $stmt->bind_param('i', $boleta_id);
         $stmt->execute();
@@ -456,7 +533,9 @@ if ($method === 'POST') {
         $entregadas = array_values(array_filter($todas, fn($x) => $x['estado'] === 'entregada'));
         $pendientes = array_values(array_filter($todas, fn($x) => $x['estado'] !== 'entregada'));
 
-        $ordenPendientes = optimizarOrdenRuta($pendientes, null, null, $destLat, $destLon);
+        $ordenPendientes = optimizarOrdenRuta($pendientes, null, null, $destLat, $destLon, $rutaPoly);
+        asegurarColumnaRuta($db);
+        guardarRutaViaje($db, $viaje_id, $rutaPoly);
         if (!$ordenPendientes) {
             // Respaldo si Google Routes falla: orden por cercanía.
             $ordenPendientes = array_column(rutaOptima($pendientes), 'id');
@@ -492,9 +571,8 @@ if ($method === 'POST') {
             $quedan = $db->query("SELECT COUNT(*) c FROM boletas WHERE viaje_id=$viaje_id")->fetch_assoc();
             if (intval($quedan['c']) === 0) {
                 // Si el viaje quedó sin paradas, liberar camión y borrarlo
-                $v = $db->query("SELECT camion_id FROM viajes WHERE id=$viaje_id")->fetch_assoc();
-                if ($v && $v['camion_id']) $db->query("UPDATE camiones SET estado='disponible' WHERE id=".intval($v['camion_id']));
                 $db->query("DELETE FROM viajes WHERE id=$viaje_id");
+                liberarCamionesTrabados($db);
             } else {
                 recalcularViaje($db, $viaje_id);
             }
@@ -513,6 +591,17 @@ if ($method === 'POST') {
         $db->query("UPDATE boletas SET estado='pendiente' WHERE id=$boleta_id");
         sincronizarZonasPendientes($db);
         jsonResponse(['success'=>true,'message'=>'Boleta reactivada, se sumó al viaje de su zona.']);
+    }
+
+    // Devolver TODAS las boletas pospuestas a 'pendiente' de una vez; cada
+    // una se reagrupa sola en el viaje armado de su zona.
+    if ($action === 'reactivar_todas_pospuestas') {
+        $db->query("UPDATE boletas SET estado='pendiente' WHERE estado='pospuesta' AND viaje_id IS NULL");
+        $n = $db->affected_rows;
+        if ($n > 0) sincronizarZonasPendientes($db);
+        jsonResponse(['success'=>true,'cantidad'=>$n,'message'=>$n > 0
+            ? "$n boleta(s) pospuesta(s) pasaron a pendientes."
+            : 'No hay boletas pospuestas.']);
     }
 
     // Sumar una boleta pospuesta directo a un viaje ARMADO puntual que
@@ -548,13 +637,13 @@ if ($method === 'POST') {
         $v = $db->query("SELECT * FROM viajes WHERE id=$viaje_id")->fetch_assoc();
         if (!$v) jsonResponse(['success'=>false,'message'=>'Viaje no encontrado']);
 
-        if ($v['camion_id']) {
-            $db->query("UPDATE camiones SET estado='disponible' WHERE id=".intval($v['camion_id']));
-        }
         // Solo las boletas que todavía no se entregaron vuelven a pendiente;
         // las que ya se marcaron entregadas quedan como están (historial real).
         $db->query("UPDATE boletas SET viaje_id=NULL, estado='pendiente' WHERE viaje_id=$viaje_id AND estado<>'entregada'");
         $db->query("DELETE FROM viajes WHERE id=$viaje_id");
+        // Libera el camión solo si no tiene otro viaje en marcha (puede
+        // estar en viaje por otro recorrido y este ser uno futuro).
+        liberarCamionesTrabados($db);
 
         jsonResponse(['success'=>true,'message'=>'Viaje cancelado. El camión quedó disponible y sus boletas pendientes se van a reasignar solas.']);
     }

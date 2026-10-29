@@ -1,0 +1,17 @@
+Options -MultiViews
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/tres-reyes-api/
+RewriteRule ^ index.html [QSA,L]
+
+# Evitar que el navegador (o el hosting) guarde una copia vieja en caché
+# de la página principal — así, cada vez que subimos un cambio, se ve
+# al toque sin necesitar recarga forzada.
+<IfModule mod_headers.c>
+  <FilesMatch "index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>
