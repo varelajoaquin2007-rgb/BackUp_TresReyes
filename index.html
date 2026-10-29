@@ -391,7 +391,7 @@
 // =============================================
 // CONFIGURACIÓN
 // =============================================
-const API = 'https://tres-reyes-logistica.page.gd';
+const API = 'https://tresreyes.turbologistica.com';
 
 // Punto de partida fijo: Fábrica Tres Reyes
 // Mapa del panel de administrador con Google Maps JavaScript API. Esta
@@ -2281,12 +2281,12 @@ async function loadTracking() {
 
   await refreshTracking();
 
-  // Auto-refresh cada 15 segundos
+  // Auto-refresh cada 10 segundos
   if (trackingInterval) clearInterval(trackingInterval);
   trackingInterval = setInterval(async () => {
     if (state.page === 'tracking') await refreshTracking();
     else clearInterval(trackingInterval);
-  }, 15000);
+  }, 10000);
 }
 
 let trackingMarkers = {};
@@ -2355,6 +2355,12 @@ function encuadrarTracking(positions) {
 // consultar a Google). Si el camión se salió del trazado (más de 1,5 km),
 // se pide UN recálculo desde su posición actual, como máximo cada 5 min.
 const trackingRecalcAt = {};
+function quitarRutaTracking(vid) {
+  const m = trackingPolylines[vid];
+  if (!m) return;
+  m.line.setMap(null);
+  delete trackingPolylines[vid];
+}
 function actualizarRutaTracking(vid, color, polyline, camion, pendientes, destino) {
   const prev = trackingPolylines[vid];
   let sig, base;
@@ -2365,7 +2371,7 @@ function actualizarRutaTracking(vid, color, polyline, camion, pendientes, destin
     const origen = camion || { lat: FABRICA.lat, lng: FABRICA.lon };
     const pts = [origen, ...pendientes.map(g => ({ lat: g.lat, lng: g.lon })), ...(destino ? [destino] : [])];
     if (pts.length < 2) {
-      if (prev) { prev.line.setMap(null); delete trackingPolylines[vid]; }
+      quitarRutaTracking(vid);
       return;
     }
     sig = 'rect:' + pts.slice(1).map(q => q.lat.toFixed(5) + ',' + q.lng.toFixed(5)).join('|');
@@ -2374,8 +2380,14 @@ function actualizarRutaTracking(vid, color, polyline, camion, pendientes, destin
 
   let path = base, idx = (prev && prev.sig === sig) ? prev.idx : 0;
   if (polyline && camion) {
-    let best = idx, bestD = Infinity;
+    // Si ya veníamos siguiendo este trazado, solo se mira unos km por
+    // delante del último punto: así una ruta que vuelve por la misma calle
+    // no hace saltar la línea al tramo de regreso.
+    const ventana = (prev && prev.sig === sig) ? 6 : Infinity;
+    let best = idx, bestD = Infinity, recorrido = 0;
     for (let j = idx; j < base.length; j++) {
+      if (j > idx) recorrido += haversineJS(base[j - 1].lat, base[j - 1].lng, base[j].lat, base[j].lng);
+      if (recorrido > ventana) break;
       const d = haversineJS(camion.lat, camion.lng, base[j].lat, base[j].lng);
       if (d < bestD) { bestD = d; best = j; }
     }
@@ -2394,7 +2406,6 @@ function actualizarRutaTracking(vid, color, polyline, camion, pendientes, destin
   line.setPath(path);
   trackingPolylines[vid] = { line, sig, base, idx };
 }
-
 // Decodifica el formato "encoded polyline" de Google (precisión 1e5).
 function decodificarPolyline(str) {
   const out = [];
@@ -2421,7 +2432,7 @@ async function refreshTracking() {
     Object.values(trackingMarkers).forEach(m => m.marker.setMap(null));
     Object.values(trackingDestinoMarkers).forEach(m => m.marker.setMap(null));
     Object.values(trackingParadaMarkers).forEach(m => m.marker.setMap(null));
-    Object.values(trackingPolylines).forEach(m => m.line.setMap(null));
+    Object.values(trackingPolylines).forEach(m => { m.line.setMap(null); if (m.conn) m.conn.setMap(null); });
     trackingMarkers = {}; trackingDestinoMarkers = {}; trackingParadaMarkers = {}; trackingPolylines = {};
     if (lista) lista.innerHTML = '<div class="card"><p class="text-muted">No hay camiones en ruta ahora mismo.</p></div>';
     return;
@@ -2436,7 +2447,7 @@ async function refreshTracking() {
     const gpsInfo = lat !== null
       ? `±${Math.round(p.accuracy||0)}m · ${new Date(p.timestamp).toLocaleTimeString('es-AR')}`
       : '📡 Esperando señal GPS...';
-    const popup = `<div style="color:#1a1a1a;font-size:13px"><strong>🚛 ${p.patente||'Sin patente'}</strong><br>👤 ${p.repartidor}<br>📍 ${p.zona}<br>✅ ${p.entregadas}/${p.total_paradas} entregas<br><small>${gpsInfo}</small></div>`;
+    const popup = `<div style="color:#1a1a1a;font-size:13px"><strong>🚛 ${p.patente||'Sin patente'}</strong><br>👤 ${p.repartidor}<br>📍 ${p.zona}<br>✅ ${agruparParadasTracking(p.paradas).filter(g=>g.hecha).length}/${agruparParadasTracking(p.paradas).length} entregas<br><small>${gpsInfo}</small></div>`;
 
     if (lat !== null) {
       if (trackingMarkers[p.viaje_id]) {
@@ -2541,7 +2552,7 @@ async function refreshTracking() {
     if (!activos.has(vid)) { trackingDestinoMarkers[vid].marker.setMap(null); delete trackingDestinoMarkers[vid]; }
   });
   Object.keys(trackingPolylines).forEach(vid => {
-    if (!activos.has(vid)) { trackingPolylines[vid].line.setMap(null); delete trackingPolylines[vid]; }
+    if (!activos.has(vid)) quitarRutaTracking(vid);
   });
   // Quitar las paradas de viajes que ya no están activos o que cambiaron
   // de agrupación (solo sobreviven las dibujadas en este refresco).
@@ -2554,6 +2565,7 @@ async function refreshTracking() {
     lista.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;margin-top:4px">
     ${r.positions.map((p,i)=>{
       const color = colors[i%colors.length];
+      const gruposTarjeta = agruparParadasTracking(p.paradas);
       const gpsTs = p.lat !== null
         ? `Actualizado: ${new Date(p.timestamp).toLocaleTimeString('es-AR')} · GPS vía ${p.fuente==='traccar'?'Traccar':'la web'}`
         : '📡 Sin señal GPS aún';
@@ -2569,9 +2581,9 @@ async function refreshTracking() {
       </div>
       <div style="display:flex;gap:16px;margin-bottom:10px">
         <div class="text-sm"><span class="text-muted">Zona:</span> <b>${p.zona||'-'}</b></div>
-        <div class="text-sm"><span class="text-muted">Entregas:</span> <b>${p.entregadas} / ${p.total_paradas}</b></div>
+        <div class="text-sm"><span class="text-muted">Entregas:</span> <b>${gruposTarjeta.filter(g=>g.hecha).length} / ${gruposTarjeta.length}</b></div>
       </div>
-      ${renderLineaParadas(p.paradas||[])}
+      ${renderLineaParadas(gruposTarjeta)}
       <div class="text-sm text-muted" style="margin-top:8px">${gpsTs}</div>
     </div>`;
     }).join('')}
@@ -2582,21 +2594,38 @@ async function refreshTracking() {
 // Línea horizontal de progreso: un círculo por parada, en orden. Los ya
 // entregados quedan marcados (verde con ✓); el tramo de línea entre dos
 // entregados también se pinta de verde, mostrando el avance del reparto.
-function renderLineaParadas(paradas) {
-  if (!paradas.length) return '';
-  const n = paradas.length;
+// Une las boletas de una misma dirección (coordenadas dentro de ~20 m) en
+// UNA parada, igual que el mapa: así las tarjetas cuentan paradas y no
+// boletas. Las que no tienen ubicación van al final, cada una aparte.
+function agruparParadasTracking(paradas) {
+  const TOL = 0.0002, grupos = [], sinCoords = [];
+  (paradas || []).forEach(b => {
+    if (!(b.lat && b.lon)) { sinCoords.push({ boletas: [b] }); return; }
+    const lat = parseFloat(b.lat), lon = parseFloat(b.lon);
+    const g = grupos.find(g => Math.abs(g.lat - lat) < TOL && Math.abs(g.lon - lon) < TOL);
+    if (g) g.boletas.push(b); else grupos.push({ lat, lon, boletas: [b] });
+  });
+  const todos = [...grupos, ...sinCoords];
+  todos.forEach(g => { g.hecha = g.boletas.every(b => b.estado === 'entregada'); });
+  return todos;
+}
+
+function renderLineaParadas(grupos) {
+  if (!grupos.length) return '';
   return `
   <div style="display:flex;align-items:flex-start;overflow-x:auto;padding:6px 2px 2px">
-    ${paradas.map((b,idx)=>{
-      const hecho = b.estado==='entregada';
+    ${grupos.map((g,idx)=>{
+      const hecho = g.hecha;
       // ¿el tramo de línea que llega a este círculo va pintado? (si el
       // anterior también está entregado)
-      const prevHecho = idx>0 && paradas[idx-1].estado==='entregada';
+      const prevHecho = idx>0 && grupos[idx-1].hecha;
       const linea = idx===0 ? '' :
         `<div style="flex:1;height:3px;margin-top:13px;min-width:14px;background:${prevHecho&&hecho?'var(--verde)':'var(--gris-cl,#3a3a3a)'}"></div>`;
+      const horas = g.boletas.map(b => b.entregada_at).filter(Boolean).sort();
+      const horaTxt = hecho && horas.length ? ' · ' + new Date(horas[horas.length-1]).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) : '';
       const circ = `
         <div style="display:flex;flex-direction:column;align-items:center;min-width:30px">
-          <div title="${(b.cliente||'').replace(/"/g,'&quot;')}${b.entregada_at?' · '+new Date(b.entregada_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):''}"
+          <div title="${g.boletas.map(b => (b.cliente||'').replace(/"/g,'&quot;')).join(', ')}${horaTxt}"
                style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid ${hecho?'var(--verde)':'var(--borde,#3a3a3a)'};background:${hecho?'var(--verde)':'transparent'};color:${hecho?'#fff':'var(--texto-2,#999)'}">
             ${hecho?'✓':(idx+1)}
           </div>
@@ -3091,15 +3120,25 @@ async function loadViajesRep() {
       <div class="text-sm text-muted">${cantParadas(v.boletas)} paradas · ${(v.boletas||[]).length} boletas · ${v.peso_total} kg</div></div>
       <span class="tag" style="background:${estadoColor[v.estado]||'#333'};color:#fff">${v.estado==='confirmado'?'Listo para salir':v.estado==='en_curso'?'En curso':v.estado==='finalizado'?'Finalizado':'—'}</span>
     </div>
-    ${(v.boletas||[]).map((b,j)=>`
-    <div class="parada-rep ${b.estado==='entregada'?'entregada':''}" id="parada-${b.id}">
-      <button class="check-btn ${b.estado==='entregada'?'done':''}" data-bid="${b.id}" ${v.estado!=='en_curso'&&b.estado!=='entregada'?'data-bloqueado="1" style="opacity:.4"':''}>${b.estado==='entregada'?'✓':''}</button>
+    ${agruparParadasTracking(v.boletas).map((g,j)=>{
+      // Una fila por PARADA (misma dirección): lista todas sus boletas y se
+      // marcan juntas con un solo casillero.
+      const hecha = g.hecha;
+      const pendientesIds = g.boletas.filter(b=>b.estado!=='entregada').map(b=>b.id).join(',');
+      const primera = g.boletas[0];
+      const horas = g.boletas.map(b=>b.entregada_at).filter(Boolean).sort();
+      const pesoTotal = g.boletas.reduce((s,b)=>s+(parseFloat(b.peso_kg)||0),0);
+      const hayPeso = g.boletas.some(b=>b.peso_kg!=null&&b.peso_kg!=='');
+      return `
+    <div class="parada-rep ${hecha?'entregada':''}" id="parada-${primera.id}">
+      <button class="check-btn ${hecha?'done':''}" data-bids="${pendientesIds}" ${v.estado!=='en_curso'&&!hecha?'data-bloqueado="1" style="opacity:.4"':''}>${hecha?'✓':''}</button>
       <div class="parada-info">
-        <div class="parada-cliente">${j+1}. ${b.cliente} ${nroBoleta(b)}</div>
-        <div class="parada-dir">${b.direccion} ${!(b.lat&&b.lon)?'<span class="tag tag-amarillo" style="font-size:11px">⚠️ Sin ubicación — no aparece en el mapa</span>':''}</div>
-        <div class="parada-peso">${b.peso_kg!=null&&b.peso_kg!==''?b.peso_kg+' kg':''} ${b.estado==='entregada'&&b.entregada_at?`<span class="text-muted">· ✓ ${formatTime(b.entregada_at)}</span>`:''}</div>
+        ${g.boletas.map((b,k)=>`<div class="parada-cliente">${k===0?(j+1)+'. ':''}${escapeHtmlTracking(b.cliente)} ${nroBoleta(b)}${g.boletas.length>1&&b.peso_kg!=null&&b.peso_kg!==''?` <span class="text-muted" style="font-weight:400;font-size:.85em">· ${b.peso_kg} kg</span>`:''}</div>`).join('')}
+        <div class="parada-dir">${escapeHtmlTracking(primera.direccion)} ${!(primera.lat&&primera.lon)?'<span class="tag tag-amarillo" style="font-size:11px">⚠️ Sin ubicación — no aparece en el mapa</span>':''}</div>
+        <div class="parada-peso">${hayPeso?(g.boletas.length>1?'Total '+(+pesoTotal.toFixed(2))+' kg':primera.peso_kg+' kg'):''} ${hecha&&horas.length?`<span class="text-muted hora-entrega">· ✓ ${formatTime(horas[horas.length-1])}</span>`:''}</div>
       </div>
-    </div>`).join('')}
+    </div>`;
+    }).join('')}
     <div style="padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap">
       ${v.estado==='confirmado'?`<button class="btn btn-primary" data-init="${v.id}">▶ Iniciar viaje</button>`:''}
       ${v.estado==='en_curso'?`
@@ -3125,14 +3164,22 @@ async function loadViajesRep() {
   document.querySelectorAll('.check-btn').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       if (btn.dataset.bloqueado) { toast('Primero tocá "▶ Iniciar viaje" para poder marcar entregas', 'error'); return; }
-      const bid = parseInt(btn.dataset.bid);
-      const rr = await api('viajes.php','POST',{action:'entregar_parada',boleta_id:bid});
-      if (!rr.success) { toast(rr.message || 'No se pudo marcar la entrega', 'error'); return; }
-      // Reflejarlo en el estado local: así "Abrir ruta en Google Maps" ya
-      // no incluye esta parada sin necesidad de recargar la lista.
-      (state.viajesRep||[]).forEach(vj => (vj.boletas||[]).forEach(bo => {
-        if (bo.id == bid) { bo.estado = 'entregada'; bo.entregada_at = new Date().toISOString(); }
-      }));
+      if (btn.classList.contains('done') || btn.dataset.enviando) return;
+      const ids = String(btn.dataset.bids || '').split(',').filter(Boolean).map(x => parseInt(x));
+      if (!ids.length) return;
+      btn.dataset.enviando = '1';
+      let fallo = null;
+      for (const bid of ids) {
+        const rr = await api('viajes.php','POST',{action:'entregar_parada',boleta_id:bid});
+        if (!rr.success) { fallo = rr.message || 'No se pudo marcar la entrega'; break; }
+        // Reflejarlo en el estado local: así "Abrir ruta en Google Maps" ya
+        // no incluye esta parada sin necesidad de recargar la lista.
+        (state.viajesRep||[]).forEach(vj => (vj.boletas||[]).forEach(bo => {
+          if (bo.id == bid) { bo.estado = 'entregada'; bo.entregada_at = new Date().toISOString(); }
+        }));
+      }
+      delete btn.dataset.enviando;
+      if (fallo) { toast(fallo, 'error'); return; }
       btn.classList.add('done');btn.textContent='✓';btn.closest('.parada-rep').classList.add('entregada');
       // Mostrar la hora de entrega al toque, sin recargar
       const pesoEl = btn.closest('.parada-rep').querySelector('.parada-peso');

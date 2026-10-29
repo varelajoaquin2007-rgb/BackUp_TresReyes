@@ -2,7 +2,7 @@
 
 > Sistema web de gestión de rutas, optimización logística y seguimiento en tiempo real para **Tres Reyes — Aceitunas y Encurtidos**.
 
-[![Ver Demo / Aplicación](https://img.shields.io/badge/Demo-tres--reyes--logistica.page.gd-blue?style=for-the-badge&logo=googlechrome)](https://tres-reyes-logistica.page.gd)
+[![Ver Demo / Aplicación](https://img.shields.io/badge/Demo-tresreyes.turbologistica.com-blue?style=for-the-badge&logo=googlechrome)](https://tresreyes.turbologistica.com)
 [![Documentación Técnica](https://img.shields.io/badge/Documentación-GitHub%20Pages-green?style=for-the-badge&logo=github)](https://varelajoaquin2007-rgb.github.io/Documentacion_Tres-Reyes/)
 [![Guía de Inicio Rápido](https://img.shields.io/badge/Gu%C3%ADa_R%C3%A1pida-QuickStart-orange?style=for-the-badge&logo=readme)](https://varelajoaquin2007-rgb.github.io/QuickStartGuide_TresReyes/)
 
@@ -118,7 +118,7 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 
 ## 📚 Enlaces y Documentación Complementaria
 
-* **Plataforma en vivo:** [https://tres-reyes-logistica.page.gd](https://tres-reyes-logistica.page.gd)
+* **Plataforma en vivo:** [https://tresreyes.turbologistica.com](https://tresreyes.turbologistica.com)
 * **Documentación Técnica:** [Documentación del Proyecto en GitHub Pages](https://varelajoaquin2007-rgb.github.io/Documentacion_Tres-Reyes/)
 * **Manual de Usuario:** [QuickStart Guide / Manual de Inicio Rápido](https://varelajoaquin2007-rgb.github.io/QuickStartGuide_TresReyes/)
 
