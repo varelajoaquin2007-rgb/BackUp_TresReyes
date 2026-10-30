@@ -450,8 +450,38 @@ function fechaLocal(d = new Date()) {
 // Si NO lo ves, el navegador está mostrando una copia vieja guardada.
 console.log('%c[TR] Versión cargada: 2026-09-21-separar-marcadores-superpuestos', 'color:#2ecc71;font-weight:bold');
 
+// "Mantener sesión iniciada": con la casilla tildada el usuario se guarda en
+// localStorage (sobrevive al cerrar el navegador) por SESION_DIAS días; sin
+// tildar, solo en sessionStorage (se pierde al cerrar la pestaña).
+const SESION_DIAS = 30;
+function guardarSesion(usuario, mantener) {
+  try {
+    sessionStorage.setItem('tr_user', JSON.stringify(usuario));
+    if (mantener) {
+      localStorage.setItem('tr_user', JSON.stringify({ usuario, expira: Date.now() + SESION_DIAS*24*60*60*1000 }));
+      localStorage.setItem('tr_mantener', '1');
+    } else {
+      localStorage.removeItem('tr_user');
+      localStorage.removeItem('tr_mantener');
+    }
+  } catch (e) {}
+}
+function cargarSesion() {
+  try {
+    const s = sessionStorage.getItem('tr_user');
+    if (s) return JSON.parse(s);
+    const l = JSON.parse(localStorage.getItem('tr_user') || 'null');
+    if (l && l.usuario && l.expira > Date.now()) return l.usuario;
+    localStorage.removeItem('tr_user');
+  } catch (e) {}
+  return null;
+}
+function borrarSesion() {
+  try { sessionStorage.removeItem('tr_user'); localStorage.removeItem('tr_user'); } catch (e) {}
+}
+
 let state = {
-  user: JSON.parse(sessionStorage.getItem('tr_user') || 'null'),
+  user: cargarSesion(),
   page: 'boletas',        // admin: boletas | armar | viajes | alertas
   repPage: 'viajes',      // rep: viajes | nav
   boletas: [],
@@ -545,6 +575,10 @@ function renderLogin() {
           <label>Contraseña</label>
           <input type="password" id="l-pass" placeholder="Tu contraseña" autocomplete="new-password" name="tr-pass-nofill" readonly onfocus="this.removeAttribute('readonly')" />
         </div>
+        <label style="display:flex;align-items:center;gap:10px;margin:2px 0 14px;cursor:pointer;font-size:14px;color:var(--texto-2)">
+          <input type="checkbox" id="l-mantener" style="width:18px;height:18px;padding:0;margin:0;accent-color:var(--verde-cl);cursor:pointer" ${localStorage.getItem('tr_mantener')==='1'?'checked':''} />
+          Mantener sesión iniciada
+        </label>
         <button class="btn btn-primary w-full" id="l-btn" style="padding:13px;font-size:15px;margin-top:4px">
           Ingresar →
         </button>
@@ -638,7 +672,7 @@ function bindLogin() {
         const r = await api('login.php','POST',{email:document.getElementById('l-email').value.trim(),password:pass.value});
         if (r.success) {
           state.user = r.usuario;
-          sessionStorage.setItem('tr_user', JSON.stringify(r.usuario));
+          guardarSesion(r.usuario, document.getElementById('l-mantener')?.checked);
           render();
         } else {
           err.textContent = r.message; err.style.display='block';
@@ -3559,7 +3593,7 @@ function bindNavButtons(){
 // =============================================
 function haversineJS(a,b,c,d){const R=6371,x=(c-a)*Math.PI/180,y=(d-b)*Math.PI/180,e=Math.sin(x/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(e),Math.sqrt(1-e));}
 
-function logout(){detenerSeguimientoUbicacion();sessionStorage.removeItem('tr_user');state.user=null;state.page='boletas';render();}
+function logout(){detenerSeguimientoUbicacion();borrarSesion();state.user=null;state.page='boletas';render();}
 
 function formatTime(ts){if(!ts)return'';const d=new Date(ts);return d.toLocaleDateString('es-AR')+' '+d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});}
 
