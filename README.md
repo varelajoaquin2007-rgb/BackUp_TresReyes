@@ -28,6 +28,7 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 * 🗓️ **Viajes programados para otros días:** Disponibilidad de camiones por día (un viaje por camión por día; los camiones en mantenimiento nunca están disponibles) y confirmación de varias zonas a la vez con fecha, camión y destino.
 * 🧾 **Número de boleta:** El lector de PDF reconoce el número de boleta en los dos formatos (`N 0006-00002396` y `N° de cobro`).
 * ⏸️ **Boletas pospuestas:** Las no entregadas pasan solas a pospuestas al finalizar el viaje; botón Posponer por boleta y "Pasar todas a pendientes".
+* 🔑 **Mantener sesión iniciada:** Casilla en el login que guarda la sesión hasta 30 días en el navegador, para no ingresar cada vez desde el celular o la PC.
 * 🔒 **Entregas controladas:** El repartidor no puede marcar entregas sin iniciar el viaje, y las paradas se cuentan por dirección real.
 * 📊 **Histórico de Envíos y Reportes:** Módulo de analítica sobre boletas procesadas, métricas de rendimiento e historial de viajes.
 
