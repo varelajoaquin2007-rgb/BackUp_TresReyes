@@ -115,6 +115,7 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 
 * **Plataforma en vivo:** [https://tresreyes.turbologistica.com](https://tresreyes.turbologistica.com)
 * **Documentación Técnica:** [Documentación del Proyecto en GitHub Pages](https://varelajoaquin2007-rgb.github.io/Documentacion_Tres-Reyes/)
+* **Documentación Técnica del Proyecto Final:** [DOCUMENTACION_TECNICA.md](DOCUMENTACION_TECNICA.md)
 * **Manual de Usuario:** [QuickStart Guide / Manual de Inicio Rápido](https://varelajoaquin2007-rgb.github.io/QuickStartGuide_TresReyes/)
 
 ---
@@ -128,8 +129,6 @@ Proyecto desarrollado por el **Equipo N.º 5** — Instituto Leonardo Murialdo (
 * **Traverso** - *Desarrollador Front/Back End*
 * **Crupi** - *Desarrollador Front/Back End*
 * **Garcia** - *Desarrollador Front End*
-* **Gurschpon** - *Encargado Administrativo*
-* **Rodriguez** - *Encargado Administrativo*
 
 **Soporte Técnico & Contacto:** `proyectointermiami@gmail.com`
 
