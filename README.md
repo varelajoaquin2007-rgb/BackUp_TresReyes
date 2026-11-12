@@ -21,10 +21,10 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 * 📄 **Carga e Ingesta Automática de Boletas:** Procesamiento y extracción de datos clave (cliente, dirección, peso de carga) directamente desde boletas en formato PDF.
 * 📍 **Geocodificación y Agrupación por Zonas:** Conversión automática de direcciones en coordenadas de mapa y agrupamiento geográfico inteligente.
 * 🧠 **Optimización de Rutas (Google Routes API):** El orden óptimo de paradas se calcula con `optimizeWaypointOrder` y la ruta real por calles se guarda para dibujarla en el mapa, sin consultas extra a Google en cada actualización.
-* 📲 **Navegación Handoff a Google Maps:** Redirección directa desde la app web a la aplicación de Google Maps en el dispositivo del chofer, cargando automáticamente la ruta óptima con hasta 23 paradas (solo las pendientes: las ya entregadas no se vuelven a incluir).
+* 📲 **Navegación Handoff a Google Maps:** Redirección directa desde la app web a la aplicación de Google Maps en el dispositivo del chofer, cargando automáticamente la ruta óptima (solo las paradas pendientes: las ya entregadas no se vuelven a incluir).
 * 🛰️ **Tracking y Monitoreo en Tiempo Real:** Visualización en vivo de la flota. La ubicación llega en segundo plano desde la app **Traccar Client** (o desde la web como alternativa) y la ruta se dibuja por calles reales desde la posición actual del camión.
 * ⚠️ **Módulo de Alertas Automáticas:** Notificaciones en tiempo real por desviaciones de ruta no autorizadas o cierres de viaje.
-* 👥 **Gestión de Roles y Permisos:** Control de acceso granular estructurado para tres perfiles (Administrador, Administrador Operativo y Repartidor).
+* 👥 **Gestión de Roles y Permisos:** Control de acceso por rol, con dos perfiles: Administrador y Repartidor.
 * 🗓️ **Viajes programados para otros días:** Disponibilidad de camiones por día (un viaje por camión por día; los camiones en mantenimiento nunca están disponibles) y confirmación de varias zonas a la vez con fecha, camión y destino.
 * 🧾 **Número de boleta:** El lector de PDF reconoce el número de boleta en los dos formatos (`N 0006-00002396` y `N° de cobro`).
 * ⏸️ **Boletas pospuestas:** Las no entregadas pasan solas a pospuestas al finalizar el viaje; botón Posponer por boleta y "Pasar todas a pendientes".
@@ -38,7 +38,7 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 
 ### **Backend & API**
 * **PHP:** Arquitectura orientada a servicios RESTful para el procesamiento de lógica de negocio, parsing de PDFs, ruteo y gestión de alertas.
-* **PHPMailer / Mailer:** Gestión de notificaciones por correo electrónico y recuperación de credenciales.
+* **Mailer propio (SMTP):** Cliente SMTP sin dependencias (`mailer.php`, Gmail con STARTTLS) para el correo de recuperación de contraseña.
 
 ### **Base de Datos**
 * **MySQL / MariaDB:** Almacenamiento relacional de usuarios, roles, catálogo de camiones, boletas, zonas geográficas, rutas e historial de posiciones.
@@ -59,39 +59,33 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 ├── index.html                  # Interfaz principal (Single Page Application)
 ├── config.php                  # PLANTILLA sin credenciales: completar con tus datos (BD, SMTP, claves de Google, TRACCAR_KEY)
 ├── .htaccess                   # Reglas de reescritura y caché
-├── config_api.php              # Configuración de claves de API y endpoints externos
-├── login.php                   # Autenticación y control de sesiones
+├── config_api.php              # Alta, edición y baja de repartidores, camiones y puntos de finalización
+├── login.php                   # Autenticación (verifica la contraseña con hash y devuelve el rol)
 ├── recuperar.php               # Módulo de recuperación de contraseña por email
 ├── boletas.php                 # Subida, extracción de PDF y gestión de boletas
 ├── viajes.php                  # Armado, cálculo de rutas óptimas y asignación de choferes
-├── tracking.php                # Receptor de posiciones e interfaz del mapa en vivo
+├── tracking.php                # Receptor de posiciones (Traccar y web) y datos del mapa en vivo
 ├── alertas.php                 # Monitor de alertas por desvíos o eventos de ruta
-├── repartidores.php            # Administración de flota de choferes
+├── repartidores.php            # Lista de repartidores y camiones
 ├── mailer.php                  # Servicio de envío de e-mails automatizados
 ├── lib_zonas.php               # Lógica de agrupación de direcciones por zonas geográficas
-└── migraciones/                # Scripts SQL de estructura y parches de base de datos
-    ├── migracion_cp.sql
-    ├── migracion_destinos.sql
-    ├── migracion_dia_hora.sql
-    ├── migracion_geo_aproximada.sql
-    ├── migracion_pospuesta.sql
-    └── migracion_zonas.sql
+└── migracion_*.sql             # Parches de la base de datos (cp, destinos, dia_hora, geo_aproximada, pospuesta, zonas)
 ```
 
 ---
 
 ## 🔐 Matriz de Permisos por Rol
 
-| Módulo / Función | Administrador | Adm. Operativo | Repartidor |
-| :--- | :---: | :---: | :---: |
-| **Panel Dashboard & Métricas** | ✔️ | ✔️ | ❌ |
-| **Ver Hoja de Ruta Propia** | ✔️ | ✔️ | ✔️ |
-| **Carga e Ingesta de Boletas (PDF)** | ✔️ | ✔️ | ❌ |
-| **Armado y Confirmación de Viajes** | ✔️ | ✔️ | ❌ |
-| **Iniciar Viaje / Navegación externa** | ❌ | ❌ | ✔️ |
-| **Tracking de Flota en Vivo** | ✔️ | ✔️ | ❌ |
-| **Gestión de Alertas** | ✔️ | ✔️ | ❌ |
-| **Configuración de Choferes y Camiones** | ✔️ | ✔️ | ❌ |
+| Módulo / Función | Administrador | Repartidor |
+| :--- | :---: | :---: |
+| **Panel Dashboard & Métricas** | ✔️ | ❌ |
+| **Ver Hoja de Ruta Propia** | ✔️ | ✔️ |
+| **Carga e Ingesta de Boletas (PDF)** | ✔️ | ❌ |
+| **Armado y Confirmación de Viajes** | ✔️ | ❌ |
+| **Iniciar Viaje / Navegación externa** | ❌ | ✔️ |
+| **Tracking de Flota en Vivo** | ✔️ | ❌ |
+| **Gestión de Alertas** | ✔️ | ❌ |
+| **Configuración de Choferes y Camiones** | ✔️ | ❌ |
 
 ---
 
@@ -102,11 +96,11 @@ El sistema automatiza el procesamiento de pedidos a partir de boletas en PDF, ge
 
 2. **Configurar la base de datos:**
    * Crear una base de datos en MySQL/phpMyAdmin (ejemplo: `tres_reyes_db`).
-   * Ejecutar en orden secuencial los scripts SQL ubicados en la carpeta de `migraciones/` para generar las tablas.
+   * Ejecutar los scripts `migracion_*.sql` de la raíz del repositorio. Son parches (`ALTER TABLE`) sobre las tablas base, que se crean a mano (el repo no incluye un `schema.sql` completo).
 
 3. **Configurar Credenciales:**
    * Modificar el archivo `config.php` indicando host, usuario, contraseña y nombre de la base de datos local.
-   * Modificar el archivo `config_api.php` para ingresar tu propia clave de **Google Maps API Key**.
+   * En `config.php` cargar las claves de Google (`GOOGLE_GEOCODING_KEY`, `GOOGLE_ROUTES_KEY` y `GOOGLE_MAPS_KEY`) y, en `index.html`, la constante `GOOGLE_MAPS_KEY` con la clave del navegador.
 
 4. **Seguimiento en segundo plano (opcional):**
    * Definir `TRACCAR_KEY` en `config.php` con una clave larga y aleatoria.
